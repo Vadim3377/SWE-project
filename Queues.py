@@ -1,7 +1,7 @@
 from collections import deque #(FIFO Queue for Take-Off)
 from queue import PriorityQueue #(Priority queue for Holding)
 
-from Aircraft import Aircraft
+from aircraft import Aircraft
 from SimTime import SimTime
 
 class HoldingQueue:
