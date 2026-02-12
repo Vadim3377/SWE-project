@@ -1,19 +1,22 @@
 import random
 import string
 
+from backend.airport import SimTime
+
+
 class EmergencyType:
     def __init__(self,mechanical_failure: bool, passenger_illness: bool, fuel_amt: int):
         self.mechanical_failure = mechanical_failure
         self.passenger_illness = passenger_illness
         self.fuel_amt = fuel_amt
     
-    def getmechfailure() -> bool:
+    def getmechfailure(self) -> bool:
         return
     
-    def getpassengerillness() -> bool:
+    def getpassengerillness(self) -> bool:
         return
     
-    def getfuelamt() -> int:
+    def getfuelamt(self) -> int:
         return
 
 class Aircraft:
