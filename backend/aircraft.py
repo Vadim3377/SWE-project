@@ -37,7 +37,7 @@ class Aircraft:
             self.origin = random.choice(string.ascii_uppercase) + random.choice(string.ascii_uppercase) + random.choice(string.ascii_uppercase)
             self.destination = "SIMULATED AIRPORT" #placeholder for out airport name
         else:
-            self.type = "SIMULATED AIRPORT" #placeholder for our airport name
+            self.origin = "SIMULATED AIRPORT"
             self.destination = random.choice(string.ascii_uppercase) + random.choice(string.ascii_uppercase) + random.choice(string.ascii_uppercase)
 
     def isEmergency() -> bool:

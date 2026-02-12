@@ -1,3 +1,7 @@
+from backend.Queues import HoldingQueue, TakeOffQueue
+from backend.runway import Runway
+
+
 class RunwayMode:
     def __init__(self, mode):
         if mode not in ["L","T"]:
@@ -11,10 +15,11 @@ class RunwayMode:
         return self.mode
 
 # Other classes are yet to be made but the airport class needs to inherit from them
-class Airport(Runway, Holding, Takeoff):                                   #Not implemented by my side but we need to inherit the properties from these classes
-    def __init__(self, runways: List[Runway], holding, takeoff):
-        self.runways = runways                                             #runways is a list of runway objects, where a runway object is just an instance of the runway class
-        super().__init__(holding = holding_items, takeoff = takeoff_items) #Will use MRO to obtain vaues, make sure variable names are unique
+class Airport:
+    def __init__(self, runways: list[Runway], holding: HoldingQueue, takeoff: TakeOffQueue):
+        self.runways = runways
+        self.holding = holding
+        self.takeoff = takeoff
 
     def assignLanding() -> None: 
         return
