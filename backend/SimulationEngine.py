@@ -24,7 +24,7 @@ class SimTime:
 
 
 
-# Emergency type (defined INSIDE engine)
+# Emergency type 
 @dataclass
 class EmergencyType:
     mechanical_failure: bool = False
