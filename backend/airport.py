@@ -12,25 +12,16 @@ class Airport:
         self.holding = holding
         self.takeoff = takeoff
 
-    def handleInbound(self, aircraft, now):
+    def handleInbound(self, aircraft, now: int):
         self.holding.enqueue(aircraft, now)
 
-    def handleOutbound(self, aircraft, now):
+    def handleOutbound(self, aircraft, now: int):
         self.takeoff.enqueue(aircraft, now)
 
-    def updateRunways(now):
-        pass
-
-    def assignLanding(now):
-        pass
-
-    def assignTakeOff(now):
-        pass
-
-    def assignLanding(self) -> None:
+    def assignLanding(time: SimTime, self) -> None:
         return
     
-    def assigntakeoff(self) -> None:
+    def assignTakeOff(time: SimTime, self) -> None:
         return
     
     def getEligibleRunways(self, mode: str) -> List[Runway]:
