@@ -16,7 +16,7 @@ from statistics import Statistics
 
 
 
-# Emergency type (defined INSIDE engine)
+# Emergency type 
 @dataclass
 class EmergencyType:
     mechanical_failure: bool = False
