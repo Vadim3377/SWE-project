@@ -21,13 +21,13 @@ class Airport:
         self.holding = holding
         self.takeoff = takeoff
 
-    def assignLanding() -> None: 
+    def assignLanding(self) -> None:
         return
     
-    def assigntakeoff() -> None:
+    def assigntakeoff(self) -> None:
         return
     
-    def getEligibleRunways(mode: RunwayMode) -> List[Runway]:
+    def getEligibleRunways(self,mode: RunwayMode) -> List[Runway]:
         return
     
     def updateRunways(time: SimTime) -> None:

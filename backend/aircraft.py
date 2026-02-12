@@ -40,13 +40,13 @@ class Aircraft:
             self.origin = "SIMULATED AIRPORT"
             self.destination = random.choice(string.ascii_uppercase) + random.choice(string.ascii_uppercase) + random.choice(string.ascii_uppercase)
 
-    def isEmergency() -> bool:
+    def isEmergency(self) -> bool:
         return
     
-    def priority(time: SimTime) -> int: #What is this for? Is this when we want to assign the priority for the aircraft before pushing it into the queue?
+    def priority(self,time: SimTime) -> int: #What is this for? Is this when we want to assign the priority for the aircraft before pushing it into the queue?
         return
     
-    def consumeFuel(data: SimTime) -> None:
+    def consumeFuel(self,data: SimTime) -> None:
         return
 
 # TODO:
