@@ -61,3 +61,4 @@ class SimulationParams:
         if abs(s - 1.0) > 1e-9:
             raise ValueError("Emergency probabilities must sum to 1.0.")
 
+            raise ValueError("Emergency probabilities must sum to 1.0.")

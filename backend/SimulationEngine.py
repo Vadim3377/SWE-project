@@ -11,6 +11,20 @@ from statistics import Statistics
 
 
 # SimTime
+# Moved from airport to SimEng
+class SimTime:
+    def __init__(self, time: int):
+        self.time = time
+
+    def advance(self, dt: int):
+        self.time += dt
+
+
+@dataclass
+class EmergencyType:
+    mechanical_failure: bool = False
+    passenger_illness: bool = False
+    fuel_emergency: bool = False
 
 
 
@@ -28,6 +42,16 @@ class EmergencyType:
 # Simulation Engine
 @dataclass
 class SimulationEngine:
+    """
+    Tick-based simulation controller.
+
+    Key properties:
+      - SimTime is object
+      - Demand generation is rate-based (accumulators per tick)
+      - Timing noise (normal distribution) lives in Statistics (not here)
+      - Jittered aircraft are placed into pending lists, then flushed into queues per tick
+    """
+
     params: SimulationParams
     airport: Airport
     stats: Statistics
@@ -43,6 +67,8 @@ class SimulationEngine:
 
         # Simulation time
         self.current_time: SimTime = SimTime(0)
+        # Basic state
+        self.current_time_min: SimTime = SimTime(0)
         self.is_paused: bool = False
 
         # Rate accumulators
@@ -80,12 +106,29 @@ class SimulationEngine:
 
         # Constraints (left empty intentionally)
         self.update_constraints(int(now), dt)
+        now: SimTime = self.current_time_min
+        dt: int = self.params.tick_size_min
+
+        # Release runways
+        self.airport.updateRunways(now)                         #CHANGED: updateRunways accepts type SimTime not int type.
+
+        # Inject aircraft whose jittered spawn time has arrived
+        self._flush_pending(now)                           
+
+        # Generate new aircraft, but add to pending using Statistics jitter
+        self._generate_arrivals(now, dt)                  
+        self._generate_departures(now, dt)                 
+
+        # Constraints
+        self.update_constraints(now.time, dt)                   ##CHANGED
 
         # Assign runways
         self.airport.assignLanding(int(now))
         self.airport.assignTakeoff(int(now))
 
         # Snapshot statistics
+        # Snapshot stats
+        #TODO: Method doesn't exist in statistics class, what's the purpose of this method anyways? Can someone make it :)
         self.stats.snapshotQueues(
             holding_size=self.airport.holding.size(),
             takeoff_size=self.airport.takeoff.size(),
@@ -98,6 +141,11 @@ class SimulationEngine:
     def run_for(self, duration_min: int) -> None:
         end_time = self.current_time.minutes + int(duration_min)
         while self.current_time.minutes < end_time:
+            self.current_time = self.current_time.advance(dt)                      
+
+    def run_for(self, duration_min: int) -> None:
+        end_time = self.current_time_min.time + duration_min
+        while self.current_time_min < end_time:
             self.tick()
 
 
@@ -159,12 +207,21 @@ class SimulationEngine:
 
             spawn_raw = self.stats.sample_outbound_spawn_time(int(now))
             self._pending_outbound.append((SimTime(int(spawn_raw)), a))
+            #TODO: sample_outbound_spawn_time Not implemented
+            spawn_raw = self.stats.sample_outbound_spawn_time(int(now))
+            self._pending_outbound.append((SimTime(int(spawn_raw)), a))
+
+        # apply emergencies to outbound as well
+        self._apply_emergencies_this_tick(created)
 
         # apply emergencies to outbound as well
         self._apply_emergencies_this_tick(created)
 
     # Pending flush
     def _flush_pending(self, now: SimTime) -> None:
+        """
+        Move pending aircraft with spawn_time <= now into the airport queues.
+        """
         if self._pending_inbound:
             due, future = [], []
             for t, a in self._pending_inbound:
@@ -172,6 +229,7 @@ class SimulationEngine:
             self._pending_inbound = future
             for _, a in due:
                 self.airport.handleInbound(a, int(now))
+                self.airport.handleInbound(a, now.time)
 
         if self._pending_outbound:
             due, future = [], []
@@ -180,6 +238,7 @@ class SimulationEngine:
             self._pending_outbound = future
             for _, a in due:
                 self.airport.handleOutbound(a, int(now))
+                self.airport.handleOutbound(a, now.time)
 
 
     # Constraints (intentionally empty for now)
@@ -212,6 +271,8 @@ class SimulationEngine:
             int(fuel),
             emergency=None,
         )
+        # Expected minimal constructor (recommended for your team)
+        return Aircraft(aircraft_id, "INBOUND", scheduled_time_min, int(fuel),emergency=None)
 
     def make_outbound_aircraft(self, now: SimTime) -> Aircraft:
         aircraft_id = f"O{self._next_out_id}"
@@ -225,3 +286,5 @@ class SimulationEngine:
             emergency=None,
         )
 
+        # fuel can be 0 for outbound if your model doesn't track it
+        return Aircraft(aircraft_id, "OUTBOUND", scheduled_time_min, 0, emergency=None)
