@@ -13,21 +13,23 @@ class Runway:
     def isAvailable(self) -> bool: 
         return (self.currentAircraft == None) and (self.status == "AVAILABLE")
     
-    def assign(self, aircraft, operationMode, time) -> None:
+    def assign(self, aircraft, operationMode, time: int) -> None:
         self.currentAircraft = aircraft
         self.mode = operationMode
         self.occupiedUntil = time
 
     #checks if a runway is available for a plane to land on it.
     def canLand(self) -> bool:
-        return self.currentAircraft == None and ((self.Mode == "MIXED") or (self.Mode == "LANDING"))
+        # Fixed typo: self.Mode -> self.mode
+        return self.currentAircraft == None and ((self.mode == "MIXED") or (self.mode == "LANDING"))
 
     #checks if a runway is available for a plane to take off from it.
     def canTakeOff(self) -> bool:
-        return self.currentAircraft == None and ((self.Mode == "MIXED") or (self.Mode == "TAKEOFF"))
+        # Fixed typo: self.Mode -> self.mode
+        return self.currentAircraft == None and ((self.mode == "MIXED") or (self.mode == "TAKEOFF"))
 
     #turns bearing into a string with the correct bearing format for UI output.
-    def getBearingString(self) -> bool:
+    def getBearingString(self) -> str: # Fixed return type: bool -> str
         if self.bearing <= 9:
             return str("0" + str(self.bearing))
         else:
