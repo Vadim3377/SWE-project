@@ -60,3 +60,5 @@ class SimulationParams:
         s = self.p_mechanical_failure + self.p_passenger_illness + self.p_fuel_emergency
         if abs(s - 1.0) > 1e-9:
             raise ValueError("Emergency probabilities must sum to 1.0.")
+
+            raise ValueError("Emergency probabilities must sum to 1.0.")

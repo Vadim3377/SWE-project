@@ -2,7 +2,7 @@ from collections import deque #(FIFO Queue for Take-Off)
 from queue import PriorityQueue #(Priority queue for Holding)
 
 from aircraft import Aircraft
-from SimulationEngine import SimTime
+
 
 class HoldingQueue:
     #class constructor initializing attributes
@@ -15,7 +15,7 @@ class HoldingQueue:
         self.orderingRule = "Emergency-first"
 
     #adds a new aircraft to the queue, returns None
-    def enqueue(self, a: Aircraft, time: SimTime) -> None:
+    def enqueue(self, a: Aircraft, time: int) -> None:
         priority = not(a.isEmergency())
         self.items.put((priority, self.arrival_order, a))
         #increment the order (acts like a counter)
@@ -59,7 +59,7 @@ class TakeOffQueue:
 
     #logic of queue follows First In First Out so no priority needed
 
-    def enqueue(self, a: Aircraft, time: SimTime) -> None:
+    def enqueue(self, a: Aircraft, time: int) -> None:
         self.items.append(a)
         #log the time aircraft joined take-off queue
         a.joinedTakeoffQueueAt = time
