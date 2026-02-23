@@ -26,7 +26,6 @@ from statistics import Statistics
 
 def create_ui():
     root = tk.Tk()
-    root.resizable(False, False)
 
     # Dimensions
     window_w = root.winfo_screenwidth() - 100
@@ -58,10 +57,11 @@ def create_ui():
     root.bind("p", lambda x: pause())
     root.bind("S", lambda x: create_simulation_settings())
     root.bind("s", lambda x: create_simulation_settings())
-    root.bind("<Tab>", lambda x: create_statistics())
+    root.bind("V", lambda x: create_statistics())
+    root.bind("v", lambda x: create_statistics())
     root.bind("R", lambda x: reset_simulation())
     root.bind("r", lambda x: reset_simulation())
-    #root.resizable(False, False)
+    root.resizable(False, False)
 
     # Helper function to create sections with inset rectangles
     def create_section(parent, x, y, w, h, name, title = True, scrollable = False):
@@ -140,11 +140,15 @@ def create_ui():
         main_button = tk.Button(runway_widget, text=runway_info, bg=lightest_grey, font=("Arial", 10, "bold"), padx=5, justify="left", anchor="w", relief="flat", command=lambda: runway_selected(runway_readable, runway))
         main_button.pack(side="left", fill="x", expand=True)
 
-        # change operating mode button
+        # Load Images ( we need to do a lot of prerequisite stuff )
+        #mode_img = tk.PhotoImage(file="mode_icon.png") # Path is relative to frontend.py
+        #status_img = tk.PhotoImage(file="status_icon.png") # Path is relative to frontend.py
+
+        # "Change operating mode" button
         operating_mode = tk.Button(runway_widget, text="B", bg=lightest_grey, padx=5, relief="solid", command=lambda: change_operating_mode(runway))
         operating_mode.pack(side="right", anchor="ne", padx = 5, pady = 5)
 
-        # change status button
+        # "Change status" button
         status_button = tk.Button(runway_widget, text="A", bg=lightest_grey, padx=5, relief="solid", command=lambda: change_status(runway, runway_widget, main_button))
         status_button.pack(side="right", anchor="ne", padx = 1, pady = 5)
        
@@ -364,7 +368,7 @@ def create_ui():
     simulation_settings_button = tk.Button(control_panel_frame, text="Simulation Settings [S]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_simulation_settings())
     simulation_settings_button.grid(column = 2, row = 0, sticky = "w", padx = 5, pady = 5)
 
-    view_statistics_button = tk.Button(control_panel_frame, text="View Statistics [Tab]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_statistics())
+    view_statistics_button = tk.Button(control_panel_frame, text="View Statistics [V]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_statistics())
     view_statistics_button.grid(column = 3, row = 0, sticky = "w", padx = 5, pady = 5)
 
     reset_simulation_button = tk.Button(control_panel_frame, text="Reset Simulation [R]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: reset_simulation())
