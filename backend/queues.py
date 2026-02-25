@@ -8,7 +8,10 @@ class HoldingQueue:
     #class constructor initializing attributes
     def __init__(self):
         #each item will be: tuple of (priority, arrival_order, Aircraft)
-        #priority: 0 for emergency, 1 otherwise (lower value = higher priority)
+        #old priority: 0 for emergency, 1 otherwise (lower value = higher priority)
+        # new priority: uses a function based on the fuel amount (Low fuel amount = high emergency, high fuel amount = low emergency)
+        # for simplicity, we can just make the priority equal to the fuel amount. 
+
         #arrival order: +1 each enqeue (FIFO if non-emergency)
         self.items = PriorityQueue()
         self.arrival_order = 0
@@ -16,7 +19,7 @@ class HoldingQueue:
 
     #adds a new aircraft to the queue, returns None
     def enqueue(self, a: Aircraft, time: int) -> None:
-        priority = not(a.isEmergency())
+        priority = a.getFuel()
         self.items.put((priority, self.arrival_order, a))
         #increment the order (acts like a counter)
         self.arrival_order += 1

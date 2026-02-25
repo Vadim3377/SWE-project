@@ -10,7 +10,7 @@ SimTime = int  # for compatibility across backend modules
 class EmergencyType:
     mechanical_failure: bool = False
     passenger_illness: bool = False
-    fuel_emergency: bool = False
+    fuel_emergency: int
 
 
 @dataclass

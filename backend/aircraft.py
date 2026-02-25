@@ -8,7 +8,7 @@ from typing import Optional
 class EmergencyType:
     mechanical_failure: bool = False
     passenger_illness: bool = False
-    fuel_emergency: bool = False
+    fuel_emergency: int
 
 class Aircraft:
     """
@@ -49,15 +49,16 @@ class Aircraft:
         return "".join(random.choice(string.ascii_uppercase) for _ in range(3))
 
     # REQUIRED by HoldingQueue
-    def isEmergency(self) -> bool:
-        e = self.emergency
-        if e is None:
-            return False
-        return bool(
-            getattr(e, "mechanical_failure", False) or
-            getattr(e, "passenger_illness", False) or
-            getattr(e, "fuel_emergency", False)
-        )
+    def getFuel(self) -> int:
+        return self.emergency.fuel_emergency
+        # e = self.emergency
+        # if e is None:
+        #     return False
+        # return bool(
+        #     getattr(e, "mechanical_failure", False) or
+        #     getattr(e, "passenger_illness", False) or
+        #     getattr(e, "fuel_emergency", False)
+        # )
 
     def priority(self, time: int) -> int:
         """
