@@ -1,8 +1,6 @@
 # simulation_params.py
 from __future__ import annotations
 from dataclasses import dataclass
-from __future__ import annotations
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -31,6 +29,7 @@ class SimulationParams:
 
     # Engine timing
     tick_size_min: int = 1  # 1-minute discrete tick
+    fuel_emergency_min: int = 15
 
 
     def validate(self) -> None:

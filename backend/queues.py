@@ -1,7 +1,8 @@
+from backend.aircraft import Aircraft
 from collections import deque #(FIFO Queue for Take-Off)
 from queue import PriorityQueue #(Priority queue for Holding)
 
-from aircraft import Aircraft
+
 
 
 class HoldingQueue:
@@ -32,6 +33,19 @@ class HoldingQueue:
         
         #log the time aircraft entered holding queue
         a.enteredHoldingAt = time
+
+    def enqueue_with_order(self, a: Aircraft, time: int, order: int) -> None:
+        emergency_priority = 0 if a.isEmergency() else 1
+        is_fuel_emergency = bool(a.emergency and getattr(a.emergency, "fuel_emergency", False))
+        fuel_key = a.fuelRemaining if is_fuel_emergency else 10 ** 9
+        self.items.put((emergency_priority, fuel_key, order, a))
+        a.enteredHoldingAt = time
+
+    def dequeue_with_order(self):
+        if self.items.empty():
+            return None
+        emergency_priority, fuel_key, order, aircraft = self.items.get()
+        return emergency_priority, fuel_key, order, aircraft
 
     
     #removes the top aircraft from the queue and returns it (None if empty)
@@ -90,3 +104,7 @@ class TakeOffQueue:
     #wasnt in the diagram but added it as deque doesnt have such method
     def isEmpty(self) -> bool:
         return not(self.items)
+
+    def to_list(self):
+        # For UI snapshot / debugging
+        return list(self.items)

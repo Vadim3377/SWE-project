@@ -1,45 +1,59 @@
 from typing import List
 
-from aircraft import Aircraft
-from queues import HoldingQueue, TakeOffQueue
-from runway import Runway
-from SimulationEngine import SimTime
+from backend.aircraft import Aircraft
+from backend.queues import HoldingQueue, TakeOffQueue
+from backend.runway import Runway
+from backend.SimulationEngine import SimTime
 
 
 # Other classes are yet to be made but the airport class needs to inherit from them
 class Airport:
-    def __init__(self, runways: list[Runway], holding: HoldingQueue, takeoff: TakeOffQueue):
+    def __init__(self, runways: list[Runway], holding: HoldingQueue, takeoff: TakeOffQueue,stats):
         self.runways = runways
         self.holding = holding
         self.takeoff = takeoff
+        self.stats = stats
 
     def handleInbound(self, aircraft, now: int):
+        self.stats.record_holding_entry(aircraft, now)
         self.holding.enqueue(aircraft, now)
 
     def handleOutbound(self, aircraft, now: int):
+        self.stats.record_takeoff_enqueue(aircraft, now)
         self.takeoff.enqueue(aircraft, now)
 
-    def assignLanding(time: SimTime, self) -> None:
-        plane_holding : Aircraft = self.holding.dequeue()
-        #found = False
+    def assignLanding(self, time: SimTime) -> None:
+        plane_holding = self.holding.dequeue()
+        if plane_holding is None:
+            return
+
         for runway in self.runways:
             if runway.isAvailable() and runway.canLand():
-                runway.assign(plane_holding, "LANDING", time)    
+                duration = 1  # minutes (or make this a parameter later)
+                runway.assign(plane_holding, "LANDING", time, duration)
                 runway.status = "OCCUPIED"
-                break
-        # if not found:
-        #     print("Not assigned for this tick")
-    
-    def assignTakeOff(time: SimTime, self) -> None:
-        plane_takeoff : Aircraft = self.takeoff.dequeue()
-        # found = False
+
+                # statistics hooks
+                self.stats.record_landing(plane_holding, time)
+                self.stats.record_runway_busy(runway, duration)
+                return
+
+    def assignTakeOff(self, time: SimTime) -> None:
+        plane_takeoff = self.takeoff.dequeue()
+        if plane_takeoff is None:
+            return
+
         for runway in self.runways:
-            if runway.isAvailable() and runway.canTakeoff():
-                runway.assign(plane_takeoff, "TAKEOFF", time)
+            if runway.isAvailable() and runway.canTakeOff():
+                duration = 1
+                runway.assign(plane_takeoff, "TAKEOFF", time, duration)
                 runway.status = "OCCUPIED"
-                break
-        # if not found:
-        #     print("Not assigned for this tick")
+
+                # statistics hooks
+                self.stats.record_takeoff(plane_takeoff, time)
+                self.stats.record_runway_busy(runway, duration)
+                return
+
     
     def getEligibleRunways(self, mode: str) -> List[Runway]:
         eligible_list = []
@@ -51,7 +65,8 @@ class Airport:
     #This method updates the runways so that the runways whose time has passed can be freed
     def updateRunways(self,time: SimTime) -> None:
         for runway in self.runways:
-            if runway.occupiedUntil < time:
+            if runway.occupiedUntil <= time:
                 runway.status = "AVAILABLE"
                 runway.occupiedUntil = 0
                 runway.currentAircraft = None
+                runway.currentOperation = None

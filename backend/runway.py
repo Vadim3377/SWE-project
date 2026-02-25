@@ -3,8 +3,9 @@ import random
 class Runway:
     def __init__(self, runway_id, runway_mode, runway_status) -> None:
         self.id = runway_id
-        self.mode = runway_mode #either string MIXED, LANDING, or TAKEOFF
-        self.status = runway_status #AVAILABLE or OCCUPIED
+        self.mode = runway_mode              # capability (DO NOT CHANGE)
+        self.status = runway_status
+        self.currentOperation = None         # "LANDING" or "TAKEOFF"
         self.occupiedUntil = 0
         self.currentAircraft = None
         self.length = random.randint(2000,4000)
@@ -12,11 +13,11 @@ class Runway:
 
     def isAvailable(self) -> bool: 
         return (self.currentAircraft == None) and (self.status == "AVAILABLE")
-    
-    def assign(self, aircraft, operationMode, time: int) -> None:
+
+    def assign(self, aircraft, operationMode, time: int, duration: int = 1) -> None:
         self.currentAircraft = aircraft
-        self.mode = operationMode
-        self.occupiedUntil = time
+        self.currentOperation = operationMode
+        self.occupiedUntil = time + duration
 
     #checks if a runway is available for a plane to land on it.
     def canLand(self) -> bool:
