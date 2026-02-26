@@ -12,7 +12,6 @@ class EmergencyType:
     passenger_illness: bool = False
     fuel_emergency: bool = False
 
-
 @dataclass
 class SimulationEngine:
     params: Any
@@ -163,29 +162,31 @@ class SimulationEngine:
         Placeholder for fuel burn logic, etc.
         """
         temp_holding = []
-        
-        # Pulls planes out of the holding queue
+
         while self.airport.holding.size() > 0:
-            temp_holding.append(self.airport.holding.dequeue())
-            
-        for aircraft in temp_holding:
-            aircraft.fuelRemaining -= dt
-            
-            if aircraft.fuelRemaining <= 0:
-                self.stats.record_diversion(aircraft, now)
-                continue  
-                
-            if aircraft.fuelRemaining <= self.params.fuel_min_min:
+            item = self.airport.holding.dequeue_with_order()
+            if item is not None:
+                temp_holding.append(item)
+
+        for _, _, order, aircraft in temp_holding:
+            aircraft.consumeFuel(dt)
+
+            # Declare fuel emergency BEFORE diversion
+            if aircraft.fuelRemaining <= self.params.fuel_emergency_min:
                 if aircraft.emergency is None:
                     aircraft.emergency = EmergencyType(fuel_emergency=True)
                 else:
                     aircraft.emergency.fuel_emergency = True
-                    
-            # Put the aircraft back into the holding queue
-            self.airport.holding.enqueue(aircraft, aircraft.enteredHoldingAt)
+
+
+            # Divert only if fuel critically low
+            if aircraft.fuelRemaining <= self.params.fuel_min_min:
+                self.stats.record_diversion(aircraft, now)
+                continue  # do NOT reinsert
+            self.airport.holding.enqueue_with_order(aircraft, aircraft.enteredHoldingAt, order)
 
     def make_inbound_aircraft(self, now: int):
-        from aircraft import Aircraft  # everything is in backend
+        from backend.aircraft import Aircraft
 
         aircraft_id = f"I{self._next_in_id}"
         self._next_in_id += 1
@@ -204,7 +205,7 @@ class SimulationEngine:
         )
 
     def make_outbound_aircraft(self, now: int):
-        from aircraft import Aircraft
+        from backend.aircraft import Aircraft
 
         aircraft_id = f"O{self._next_out_id}"
         self._next_out_id += 1

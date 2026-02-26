@@ -1,14 +1,18 @@
+from backend.aircraft import Aircraft
 from collections import deque #(FIFO Queue for Take-Off)
 from queue import PriorityQueue #(Priority queue for Holding)
 
-from aircraft import Aircraft
+
 
 
 class HoldingQueue:
     #class constructor initializing attributes
     def __init__(self):
-        #each item will be: tuple of (priority, arrival_order, Aircraft)
-        #priority: 0 for emergency, 1 otherwise (lower value = higher priority)
+        #each item will be: tuple of (priority, fuel, arrival_order, Aircraft)
+        #old priority: 0 for emergency, 1 otherwise (lower value = higher priority)
+        # new priority: uses a function based on the fuel amount (Low fuel amount = high emergency, high fuel amount = low emergency)
+        # for simplicity, we can just make the priority equal to the fuel amount. 
+
         #arrival order: +1 each enqeue (FIFO if non-emergency)
         self.items = PriorityQueue()
         self.arrival_order = 0
@@ -16,13 +20,32 @@ class HoldingQueue:
 
     #adds a new aircraft to the queue, returns None
     def enqueue(self, a: Aircraft, time: int) -> None:
-        priority = not(a.isEmergency())
-        self.items.put((priority, self.arrival_order, a))
+        # Primary: emergencies before non-emergencies
+        emergency_priority = 0 if a.isEmergency() else 1
+
+        # Secondary: ONLY for fuel-emergency aircraft -> lower fuelRemaining first
+        is_fuel_emergency = bool(a.emergency and getattr(a.emergency, "fuel_emergency", False))
+        fuel_key = a.fuelRemaining if is_fuel_emergency else 10 ** 9
+
+        self.items.put((emergency_priority,fuel_key, self.arrival_order, a))
         #increment the order (acts like a counter)
         self.arrival_order += 1
         
         #log the time aircraft entered holding queue
         a.enteredHoldingAt = time
+
+    def enqueue_with_order(self, a: Aircraft, time: int, order: int) -> None:
+        emergency_priority = 0 if a.isEmergency() else 1
+        is_fuel_emergency = bool(a.emergency and getattr(a.emergency, "fuel_emergency", False))
+        fuel_key = a.fuelRemaining if is_fuel_emergency else 10 ** 9
+        self.items.put((emergency_priority, fuel_key, order, a))
+        a.enteredHoldingAt = time
+
+    def dequeue_with_order(self):
+        if self.items.empty():
+            return None
+        emergency_priority, fuel_key, order, aircraft = self.items.get()
+        return emergency_priority, fuel_key, order, aircraft
 
     
     #removes the top aircraft from the queue and returns it (None if empty)
@@ -31,24 +54,23 @@ class HoldingQueue:
         if self.items.empty():
             return None
         #unpacking tuple to get aircraft
-        _,_, aircraftObj = self.items.get() 
-        return aircraftObj
+        _, _, _, aircraft_obj = self.items.get()
+        return aircraft_obj
     
     #returns the aircraft at the top of the queue (None if empty)
     def peek(self) -> Aircraft | None:
         #check if queue empty return None
         if self.items.empty():
             return None
-        #temporarily remove the item from queue and add it back
-        temp = self.items.get()
-        self.items.put(temp)
-        #unpacking tuple to get aircraft
-        _,_, aircraftObj = temp
-        return aircraftObj
+        return self.items.queue[0][3]
 
     #returns the size of the Holding queue
     def size(self) -> int:
         return self.items.qsize()
+
+    def to_list(self):
+        # For UI snapshot
+        return [t[3] for t in list(self.items.queue)]
 
 
 class TakeOffQueue:
@@ -82,3 +104,7 @@ class TakeOffQueue:
     #wasnt in the diagram but added it as deque doesnt have such method
     def isEmpty(self) -> bool:
         return not(self.items)
+
+    def to_list(self):
+        # For UI snapshot / debugging
+        return list(self.items)
