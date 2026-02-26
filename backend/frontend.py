@@ -11,17 +11,17 @@
 # additional info on aircraft widgets 
 # mouse/trackpad scrolling
 
-# Will next week:
-# progress bars
-# plane/runway display
-# display caption
-# button images
-# plane animation
+# Will:
+# progress bars - DONE
+# plane/runway display - HARD TO DO
+# display caption - ^^ Alongside Display
+# button images - ^^ Doing next
 
 import tkinter as tk
 from aircraft import Aircraft
 from runway import Runway
 from statistics import Statistics
+from tkinter import ttk # For Progress Bars
 #from SimulationParameters import SimulationParams
 
 def create_ui():
@@ -48,7 +48,25 @@ def create_ui():
     light_grey = "#5c5c5c"
     lightest_grey = "#A6A4A4"
     text_color = "#000000"
+    emergency_text_color = "#bf0000"
    
+    # Progress Bar Custom Styling
+    style = ttk.Style()
+    style.theme_use('clam') # 'clam' is required to allow color overrides
+    style.configure("Green.Horizontal.TProgressbar", foreground='green', background='green', thickness=15)
+    style.configure("Orange.Horizontal.TProgressbar", foreground='orange', background='orange', thickness=15)
+    style.configure("Vertical.TScrollbar", 
+                        gripcount=0,
+                        background=lightest_grey, 
+                        troughcolor=medium_grey, 
+                        bordercolor=dark_grey, 
+                        arrowcolor=medium_grey,
+                        arrowsize=13)
+
+    style.map("Vertical.TScrollbar",
+                background=[('active', "#dcdad5"), ('disabled', lightest_grey)],
+                troughcolor=[('active', medium_grey), ('disabled', medium_grey)])
+
     root.title("Airport Simulation")
     root.geometry(f"{window_w}x{window_h}")
     root.configure(bg=dark_grey)
@@ -68,7 +86,7 @@ def create_ui():
         # Create the outer frame (The container/border)
         outer_frame = tk.Frame(parent, bg=medium_grey, width=w, height=h)
         outer_frame.place(x=x, y=y)
-       
+        
         # Create the inner frame (The inset)
         # 4px margin on all sides means width and height are reduced by 8px total
         inset = 4
@@ -80,77 +98,182 @@ def create_ui():
         if title:
         # Label placed inside the inner_frame
             tk.Label(inner_frame, text=name, bg=lightest_grey, fg=text_color, font=("Arial", 14, "bold")).place(relx=0, rely=0, relwidth=1, anchor="nw")
-       
+        
         # If not a scrollable section, returns inner_frame for us, as that is where future widgets will go
         if not scrollable:
             return inner_frame
 
         # Otherwise, allows for scrolling inside the frame
         canvas = tk.Canvas(inner_frame, bg=light_grey, highlightthickness=0)
-        scrollbar = tk.Scrollbar(inner_frame, orient="vertical", command=canvas.yview)
+        scrollbar = ttk.Scrollbar(inner_frame, orient="vertical", command=canvas.yview)
 
         scrollable_inner_frame = tk.Frame(canvas, bg=light_grey)
-        scrollable_inner_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
         window = canvas.create_window((0, 0), window=scrollable_inner_frame, anchor="nw")
+
+        # Functionality to hide the scrollbar when not needed
+        def update_scroll_visibility(event=None):
+            inner_frame.update_idletasks()
+            content_height = scrollable_inner_frame.winfo_reqheight()
+            visible_height = canvas.winfo_height()
+
+            if content_height <= visible_height:
+                scrollbar.place_forget()
+                canvas.yview_moveto(0)
+            else:
+                scrollbar.place(relx=1, y=40, anchor="ne", height=inner_h - 40)
+                canvas.configure(scrollregion=canvas.bbox("all"))
+
+        scrollable_inner_frame.bind("<Configure>", update_scroll_visibility)
 
         def resize_scrollable_frame(event):
             canvas.itemconfig(window, width=event.width)
+            update_scroll_visibility()
+
+        # Functionality to scroll with mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _bind_to_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_from_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+
+        # These events trigger when the mouse enters or leaves the section
+        inner_frame.bind("<Enter>", _bind_to_mousewheel)
+        inner_frame.bind("<Leave>", _unbind_from_mousewheel)
+        # Also bind to the canvas and scrollable_inner_frame so children don't block it
+        canvas.bind("<Enter>", _bind_to_mousewheel)
+        scrollable_inner_frame.bind("<Enter>", _bind_to_mousewheel)
 
         canvas.bind("<Configure>", resize_scrollable_frame)
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.place(x=0, y=40, relwidth=1, height=inner_h - 40)
-        scrollbar.place(relx=1, y=40, anchor="ne", height=inner_h - 40)
-
+        
         return scrollable_inner_frame
 
-    # Helper function to create each plane widget (created as a button)
+    # Helper function to create each plane widget (now created as a Frame!)
     def create_plane_widget(queue_column, plane):
-        # Text to be shown to the user in each widget
-        plane_info = (plane.callsign + "\n" + plane.operator + "\nScheduled " + format_time(plane.scheduledTime) + "\n")
+        # Create a Frame (Used to be Button)
+        widget_frame = tk.Frame(queue_column, bg=lightest_grey, padx=5, pady=5, cursor="hand2")
+        widget_frame.pack(fill="x", pady=4, padx=(4, 22))
 
-        # Creates and places the widget
-        plane_label = tk.Button(queue_column, text=plane_info, bg=lightest_grey, font=("Arial", 10), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: airplane_selected(plane))
-        plane_label.pack(fill="x", pady=4, padx=(4, 22))
+        # Configure the grid inside the frame (2 equal columns)
+        widget_frame.columnconfigure(0, weight=1)
+        widget_frame.columnconfigure(1, weight=1)
 
-    # Helper function to create each runway widget (created as a button)
+        # Create the 6 text labels (using placeholders for the right side)
+        tl = tk.Label(widget_frame, text=plane.callsign, bg=lightest_grey, font=("Arial", 13, "bold"), anchor="w")
+        tr = tk.Label(widget_frame, text="[Emergency]", bg=lightest_grey, fg=emergency_text_color, font=("Arial", 11, "bold"), anchor="e")
+        
+        ml = tk.Label(widget_frame, text=plane.operator, bg=lightest_grey, font=("Arial", 11), anchor="w")
+        mr = tk.Label(widget_frame, text="", bg=lightest_grey, font=("Arial", 5), anchor="e")
+        
+        bl = tk.Label(widget_frame, text="[Progress]", bg=lightest_grey, font=("Arial", 11, "bold"), anchor="w")
+        br = tk.Label(widget_frame, text="Scheduled " + format_time(plane.scheduledTime), bg=lightest_grey, font=("Arial", 11), anchor="e")
+
+        # Place them in the grid
+        tl.grid(row=0, column=0, sticky="w")
+        tr.grid(row=0, column=1, sticky="e")
+        ml.grid(row=1, column=0, sticky="w")
+        mr.grid(row=1, column=1, sticky="e")
+        bl.grid(row=2, column=0, sticky="w")
+        br.grid(row=2, column=1, sticky="e")
+
+        # Add the Progress Bar at the bottom (Row 3, spanning both columns)
+        
+        # Create a container frame with a strict height
+        progress_container = tk.Frame(widget_frame, height=13, bg=lightest_grey)
+        progress_container.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+        
+        # Prevents the frame from expanding to fit the progress bar
+        progress_container.pack_propagate(False) 
+
+        # Create the progress bar inside the container and set it to fill the space
+        progress = ttk.Progressbar(progress_container, orient="horizontal", mode="determinate")
+        progress.pack(fill="both", expand=True)
+        progress['value'] = 50 # Placeholder for logic
+
+        # Make the whole frame and its labels clickable
+        def on_click(event):
+            airplane_selected(plane)
+            
+        widget_frame.bind("<Button-1>", on_click)
+        # Bind the click to the labels too, so clicking text works
+        for label in (tl, tr, ml, mr, bl, br):
+            label.bind("<Button-1>", on_click)
+
+    # Helper function to create each runway widget (now using Frame instead of Button)
     def create_runway_widget(runway_column, runway):
-        # Turns runway and airport attributes into a more readable, user-friendly format
         if runway.mode == "LANDING":
-            runway_readable = "Runway "+ str(runway.id) + " - Landing only"
+            runway_title_readable = "Runway "+ str(runway.id) + " - Landing only"
         elif runway.mode == "TAKEOFF":
-            runway_readable = "Runway "+ str(runway.id) + " - Take off only"
+            runway_title_readable = "Runway "+ str(runway.id) + " - Take off only"
         else:
-            runway_readable = "Runway "+ str(runway.id) + " - Mixed Use"
+            runway_title_readable = "Runway "+ str(runway.id) + " - Mixed Use"
 
         if runway.currentAircraft == None:
-            airplane_readable = "Not currently in use"
+            runway_airplane_readable = "Not currently in use"
         else:
-            if runway.currentAircraft.type == "INBOUND":
-                airplane_readable = runway.currentAircraft.callsign + " - Landing"
-            else: 
-                airplane_readable = runway.currentAircraft.callsign + " - Taking off"
-        # Text to be shown to the user in each widget
-        runway_info = runway_readable + "\n" + airplane_readable + "\n"
+            direction = "Landing" if runway.currentAircraft.type == "INBOUND" else "Taking off"
+            runway_airplane_readable = f"{runway.currentAircraft.callsign} - {direction}"
 
-        # Container frame (acts as the widget row)
-        runway_widget = tk.Frame(runway_column, bg=lightest_grey)
-        runway_widget.pack(fill="x", pady=4, padx=(4, 22))
+        emergency_readable = "Fire"
 
-        # Main runway button
-        main_button = tk.Button(runway_widget, text=runway_info, bg=lightest_grey, font=("Arial", 10, "bold"), padx=5, justify="left", anchor="w", relief="flat", command=lambda: runway_selected(runway_readable, runway))
-        main_button.pack(side="left", fill="x", expand=True)
+        # Main container frame
+        widget_frame = tk.Frame(runway_column, bg=lightest_grey, padx=5, pady=5, cursor="hand2")
+        widget_frame.pack(fill="x", pady=4, padx=(4, 22))
+        widget_frame.columnconfigure(0, weight=1)
+        widget_frame.columnconfigure(1, weight=1)
 
-        # Load Images ( we need to do a lot of prerequisite stuff )
-        #mode_img = tk.PhotoImage(file="mode_icon.png") # Path is relative to frontend.py
-        #status_img = tk.PhotoImage(file="status_icon.png") # Path is relative to frontend.py
+        # Create the container
+        progress_container = tk.Frame(widget_frame, height=13, bg=lightest_grey)
+        progress_container.pack_propagate(False) 
+        # Store the grid settings in a dictionary for easy re-application
+        pg_settings = {"row": 3, "column": 0, "columnspan": 2, "sticky": "ew", "pady": (5, 0)}
+        progress_container.grid(**pg_settings)
 
-        # "Change operating mode" button
-        operating_mode = tk.Button(runway_widget, text="B", bg=lightest_grey, padx=5, relief="solid", command=lambda: change_operating_mode(runway))
-        operating_mode.pack(side="right", anchor="ne", padx = 5, pady = 5)
+        # Add the Progress Bar at the bottom (Row 3, spanning both columns)
+        bar_style = "Orange.Horizontal.TProgressbar" if runway.currentOperation == "LANDING" else "Green.Horizontal.TProgressbar"
+        progress = ttk.Progressbar(progress_container, orient="horizontal", mode="determinate", style=bar_style)
+        progress.pack(fill="both", expand=True)
+        progress['value'] = 25
 
-        # "Change status" button
-        status_button = tk.Button(runway_widget, text="A", bg=lightest_grey, padx=5, relief="solid", command=lambda: change_status(runway, runway_widget, main_button))
-        status_button.pack(side="right", anchor="ne", padx = 1, pady = 5)
+        # Create Buttons
+        button_frame = tk.Frame(widget_frame, bg=lightest_grey)
+        button_frame.grid(row=0, column=1, sticky="ne")
+
+        # Status and Mode Buttons
+        operating_mode = tk.Button(button_frame, text="B", bg=light_grey, padx=5, relief="solid", command=lambda: change_operating_mode(runway))
+        operating_mode.pack(side="right", padx=(2, 0))
+
+        status_button = tk.Button(button_frame, text="A", bg=light_grey, padx=5, relief="solid", command=lambda r=runway, wf=widget_frame, pc=progress_container: change_status(r, wf, pc, pg_settings))
+        status_button.pack(side="right")
+
+        # Labels for Left Side
+        tl = tk.Label(widget_frame, text=runway_title_readable, bg=lightest_grey, font=("Arial", 12, "bold"), anchor="w")
+        bl = tk.Label(widget_frame, text=runway_airplane_readable, bg=lightest_grey, font=("Arial", 10, "bold"), anchor="w")
+
+        tl.grid(row=0, column=0, sticky="w")
+        bl.grid(row=2, column=0, sticky="w")
+
+
+
+        # Other Right Side Label
+        br = tk.Label(widget_frame, text=emergency_readable, bg=lightest_grey, fg=emergency_text_color, font=("Arial", 12, "bold"), anchor="e")
+        br.grid(row=2, column=1, sticky="e")
+        
+        progress.pack(fill="both", expand=True)
+        progress['value'] = 25 # Placeholder for simulation data
+
+        # Make widget clickable (need to exclude the buttons in button_frame)
+        def on_click(event):
+            runway_selected(runway_title_readable, runway)
+
+        widget_frame.bind("<Button-1>", on_click)
+        for label in (tl, bl, br):
+            label.bind("<Button-1>", on_click)
        
     # Creates the widget which shows all the information about the airplane selected
     def airplane_info_widget(display_frame, airplane):
@@ -219,20 +342,43 @@ def create_ui():
         else:
             runway.mode = "LANDING"
     
+    # Function to fix widget children colors when updating parent widget color
+    def update_widget_colors(widget, color):
+        # Recursively updates the background of all standard Tkinter widgets.
+        # Ignore ttk widgets (progress bars) and buttons
+        if not isinstance(widget, (ttk.Progressbar, tk.Button)):
+            widget.configure(bg=color)
+        
+        for child in widget.winfo_children():
+            update_widget_colors(child, color)
+
     # Function to cycle through each status
-    def change_status(runway, runway_widget, main_button):
+    def change_status(runway, runway_widget, progress_container, pg_settings):
+        # Determine the state
         if runway.status == "AVAILABLE":
             runway.status = "RUNWAY INSPECTION"
-            main_button.config(bg = light_grey,)
-            runway_widget.config(bg = light_grey, relief = "solid", borderwidth = 1)
+            new_bg, show_progress, relief_val, border_val = light_grey, False, "solid", 1
         elif runway.status == "RUNWAY INSPECTION":
             runway.status = "SNOW CLEARANCE"
+            new_bg, show_progress, relief_val, border_val = light_grey, False, "solid", 1
         elif runway.status == "SNOW CLEARANCE":
             runway.status = "EQUIPMENT FAILURE"
+            new_bg, show_progress, relief_val, border_val = light_grey, False, "solid", 1
         else:
             runway.status = "AVAILABLE"
-            main_button.config(bg = lightest_grey)
-            runway_widget.config(bg = lightest_grey, relief = "flat", borderwidth = 0)
+            new_bg, show_progress, relief_val, border_val = lightest_grey, True, "flat", 0
+
+        # 1. Update the main frame
+        runway_widget.config(bg=new_bg, relief=relief_val, borderwidth=border_val)
+        
+        # 2. Use the recursive hunt to update all children
+        update_widget_colors(runway_widget, new_bg)
+
+        # 3. Toggle Progress Bar
+        if show_progress:
+            progress_container.grid(**pg_settings)
+        else:
+            progress_container.grid_forget()
 
     # Function that creates the popups for settings and statistics
     def create_popup(title):
