@@ -14,8 +14,6 @@ class Airport:
         self.holding = holding
         self.takeoff = takeoff
         self.stats = stats
-        self.landing_in_progress = []
-        self.takeoff_in_progress = []
 
     def _runways_for_landing(self):
         # LANDING-only first, then MIXED
@@ -86,10 +84,3 @@ class Airport:
                 runway.occupiedUntil = 0
                 runway.currentAircraft = None
                 runway.currentOperation = None
-
-    def holding_display(self):
-        # show in-progress (for progress bars), then waiting queue
-        return list(self.landing_in_progress) + self.holding.to_list()
-
-    def takeoff_display(self):
-        return list(self.takeoff_in_progress) + self.takeoff.to_list()
