@@ -109,7 +109,7 @@ def build_engine(seed: int = 42) -> SimulationEngine:
     params = SimulationParams(
         num_runways=2,
         inbound_rate_per_hour=12.0,
-        outbound_rate_per_hour=6.0,
+        outbound_rate_per_hour=12.0,
         arrival_stddev_min=0,
         departure_stddev_min=0,
         emergencies_per_tick=0,
@@ -123,8 +123,8 @@ def build_engine(seed: int = 42) -> SimulationEngine:
     takeoff = TakeOffQueue()
 
     runways = [
-        Runway(runway_id=1, runway_mode="MIXED", runway_status="AVAILABLE"),
-        Runway(runway_id=2, runway_mode="LANDING", runway_status="AVAILABLE"),
+        Runway(runway_id=1, runway_mode="TAKEOFF"),
+        Runway(runway_id=2, runway_mode="LANDING"),
     ]
 
     airport = Airport(runways=runways, holding=holding, takeoff=takeoff, stats=stats)
@@ -159,8 +159,10 @@ def inject_test_aircraft(engine: SimulationEngine) -> None:
 def main() -> None:
     engine = build_engine(seed=1)
 
-    # Start at t=0, inject a known queue state
-    inject_test_aircraft(engine)
+    # Set to True to pre-load for testing.
+    INJECT_TEST_AIRCRAFT = True
+    if INJECT_TEST_AIRCRAFT:
+        inject_test_aircraft(engine)
 
     # Run a few ticks with detailed printing
     # for _ in range(15):

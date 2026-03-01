@@ -32,12 +32,13 @@ class Airport:
                 continue
 
             plane = self.holding.dequeue()
-            if plane is None:
-                return  # no more inbound aircraft
+            if plane is None: return
 
-            duration = 1
+            duration = 3
             runway.assign(plane, "LANDING", time, duration)
-            runway.status = "OCCUPIED"
+            runway.startTime = time # Needs to store Start Time 
+            runway.duration = duration # Needs to store Duration
+            runway.occupancy = "OCCUPIED"
             self.stats.record_landing(plane, time)
             self.stats.record_runway_busy(runway, duration)
 
@@ -50,12 +51,13 @@ class Airport:
                 continue
 
             plane = self.takeoff.dequeue()
-            if plane is None:
-                return  # no more outbound aircraft
+            if plane is None: return  
 
-            duration = 1
+            duration = 3
             runway.assign(plane, "TAKEOFF", time, duration)
-            runway.status = "OCCUPIED"
+            runway.startTime = time # Needs to store Start Time 
+            runway.duration = duration # Needs to store Duration
+            runway.occupancy = "OCCUPIED"
             self.stats.record_takeoff(plane, time)
             self.stats.record_runway_busy(runway, duration)
 
@@ -70,8 +72,8 @@ class Airport:
     #This method updates the runways so that the runways whose time has passed can be freed
     def updateRunways(self,time: SimTime) -> None:
         for runway in self.runways:
-            if runway.occupiedUntil <= time:
-                runway.status = "AVAILABLE"
+            if runway.occupiedUntil <= time and runway.occupancy == "OCCUPIED":
+                runway.occupancy = "FREE"
                 runway.occupiedUntil = 0
                 runway.currentAircraft = None
                 runway.currentOperation = None

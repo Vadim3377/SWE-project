@@ -1,11 +1,11 @@
 import random
-## ISSUE NOTE: The mode attribute seems to be just the same as the currentOperation
 
 class Runway:
-    def __init__(self, runway_id, runway_mode, runway_status) -> None:
+    def __init__(self, runway_id, runway_mode) -> None:
         self.id = runway_id
         self.mode = runway_mode              # capability 
         self.status = "AVAILABLE"
+        self.occupancy = "FREE"
         self.currentOperation = None         # "LANDING" or "TAKEOFF"
         self.occupiedUntil = 0
         self.currentAircraft = None
@@ -20,12 +20,12 @@ class Runway:
         self.currentOperation = operationMode
         self.occupiedUntil = time + duration
 
-    #checks if a runway is available for a plane to land on it.
+    # Checks if a runway is available for a plane to land on it.
     def canLand(self) -> bool:
         # Fixed typo: self.Mode -> self.mode
         return self.currentAircraft == None and ((self.mode == "MIXED") or (self.mode == "LANDING"))
 
-    #checks if a runway is available for a plane to take off from it.
+    # Checks if a runway is available for a plane to take off from it.
     def canTakeOff(self) -> bool:
         # Fixed typo: self.Mode -> self.mode
         return self.currentAircraft == None and ((self.mode == "MIXED") or (self.mode == "TAKEOFF"))
