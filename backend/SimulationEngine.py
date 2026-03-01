@@ -245,9 +245,11 @@ class SimulationEngine:
 
     def get_holding_queue(self):
         return self.airport.holding.to_list()
+        return self.airport.holding_display()
 
     def get_takeoff_queue(self):
         return self.airport.takeoff.to_list()
+        return self.airport.takeoff_display()
 
     def get_runways(self):
         return self.airport.runways
