@@ -1,12 +1,9 @@
 #this file is temporarily in backend as we dont have a working main.py (yet) and other files need to be accessed
 
 # things still TODO:
-# Angelina this week:
-# link with backend + remove testing code
-# pause
+# Angelina:
 # reset simulation 
 # time
-# making statistic outputs look good
 
 # Will:
 # progress bars - DONE
@@ -15,13 +12,16 @@
 # button images - ^^ Doing next
 
 import tkinter as tk
-from backend.aircraft import Aircraft
-from backend.runway import Runway
-from backend.statistics import Statistics
 from tkinter import ttk # For Progress Bars
-#from SimulationParameters import SimulationParams
+from backend.SimulationParameters import SimulationParams
+from backend.SimulationEngine import SimulationEngine, EmergencyType
+from backend.statistics import Statistics
+from backend.queues import HoldingQueue, TakeOffQueue
+from backend.runway import Runway
+from backend.airport import Airport
+from backend.aircraft import Aircraft
 
-def create_ui():
+def create_ui(engine):
     root = tk.Tk()
 
     # Dimensions
@@ -78,6 +78,9 @@ def create_ui():
     root.bind("r", lambda x: reset_simulation())
     root.resizable(False, False)
 
+    holding_plane_widgets = {}
+    takeoff_plane_widgets = {}
+    
     # Helper function to create sections with inset rectangles
     def create_section(parent, x, y, w, h, name, title = True, scrollable = False):
         # Create the outer frame (The container/border)
@@ -165,7 +168,7 @@ def create_ui():
             emergency_label = "" 
         elif plane.emergency.mechanical_failure:
             emergency_label = "Mechanical Failure"
-        elif plane.emergency.passanger_illness:
+        elif plane.emergency.passenger_illness:
             emergency_label = "Passanger Illness"
         elif plane.emergency.fuel_emergency:
             emergency_label = "Fuel Emergency"
@@ -210,6 +213,25 @@ def create_ui():
         # Bind the click to the labels too, so clicking text works
         for label in (tl, tr, ml, mr, bl, br):
             label.bind("<Button-1>", on_click)
+
+        return { "frame": widget_frame, "tl": tl, "tr": tr, "ml": ml, "br": br, "progress": progress }
+    
+    def update_plane_widget(widget, plane):
+        if plane.emergency is None:
+            emergency_label = ""
+        elif plane.emergency.mechanical_failure:
+            emergency_label = "Mechanical Failure"
+        elif plane.emergency.passenger_illness:
+            emergency_label = "Passenger Illness"
+        elif plane.emergency.fuel_emergency:
+            emergency_label = "Fuel Emergency"
+
+        widget["tl"].config(text=plane.callsign)
+        widget["tr"].config(text=emergency_label)
+        widget["ml"].config(text=plane.operator)
+        widget["br"].config(text="Scheduled " + format_time(plane.scheduledTime))
+
+        widget["progress"]["value"] = 50
 
     # Helper function to create each runway widget (now using Frame instead of Button)
     def create_runway_widget(runway_column, runway):
@@ -332,12 +354,12 @@ def create_ui():
     
     # Called if an airplane button/widget is clicked
     def airplane_selected(airplane):
-        display_info_frame = create_section(root, display_info_x_pos, y_pos_3_2, col_w_display, h_3_2, "Aircraft " + airplane.callsign)
+        display_info_frame = create_section(root, margin_x + col_w_standard + gap + col_w_standard + gap, margin_y + col_w_display + gap, col_w_display, top_col_h - col_w_display - gap, "Aircraft " + airplane.callsign)
         airplane_info_widget(display_info_frame, airplane)
 
     # Called if a runway button/widget is clicked
     def runway_selected(runway_readable, runway):
-        display_info_frame = create_section(root,display_info_x_pos, y_pos_3_2, col_w_display, h_3_2, runway_readable)
+        display_info_frame = create_section(root, margin_x + col_w_standard + gap + col_w_standard + gap, margin_y + col_w_display + gap, col_w_display, top_col_h - col_w_display - gap, runway_readable)
         runway_info_widget(display_info_frame, runway)
 
     # Function to cycle through each operating mode
@@ -348,6 +370,7 @@ def create_ui():
             runway.mode = "TAKEOFF"
         else:
             runway.mode = "LANDING"
+        update_ui()
     
     # Function to fix widget children colors when updating parent widget color
     def update_widget_colors(widget, color):
@@ -411,10 +434,11 @@ def create_ui():
 
     #TODO: Function to pause the simulation
     def pause():
-        pass
+        engine.is_paused = not engine.is_paused
     
     # Function that generates the simulation settings box with all the inputs necessary
     def create_simulation_settings():
+        pause()
         info_frame = create_popup("Simulation Settings")
 
         number_of_runways = input_row(info_frame, "Number Of Runways: ", 0)
@@ -426,15 +450,15 @@ def create_ui():
         rate_of_emergencies = input_row(info_frame, "Rate of emergencies: ", 6, 0.3)
 
         apply_changes_button = tk.Button(info_frame, font=("Arial", 13, "bold"), text="Apply Changes", bg="white", relief="solid", justify= "left", command=lambda: 
-                                         apply_changes(number_of_runways.get(), inbound_flow.get(), outbound_flow.get(), speed_multiplier.get(), max_wait_time.get(), min_fuel_level.get(), rate_of_emergencies.get()))
+                                         apply_changes(engine, number_of_runways.get(), inbound_flow.get(), outbound_flow.get(), speed_multiplier.get(), max_wait_time.get(), min_fuel_level.get(), rate_of_emergencies.get()))
         apply_changes_button.grid(column = 0, row = 7, columnspan=2, padx = 10, pady=20)
 
     # Function that generates the statistics box with data pulled from the statistics class.
     def create_statistics():
+        pause()
         info_frame = create_popup("Statistical Report")
 
-        statistics = Statistics() #testing code: temporary statistics
-        report_data = statistics.report()
+        report_data = engine.get_report()
 
         info_row(info_frame, "Maximum holding queue size: ", report_data["maxHoldingQueue"], 0)
         info_row(info_frame, "Average holding queue size ", report_data["avgHoldingQueue"], 1)
@@ -446,7 +470,7 @@ def create_ui():
         info_row(info_frame, "Average take off queue wait time (minutes) ", report_data["avgTakeoffWait"], 7)
         info_row(info_frame, "Total inbound diversions ", report_data["diversions"], 8)
         info_row(info_frame, "Total outbound cancellations ", report_data["cancellations"], 9)
-        info_row(info_frame, "Total simulation time ", "100", 10)
+        info_row(info_frame, "Total simulation time ", engine.get_time(), 10)
 
     # Function to remove the settings/statistics popup
     def close_popup(overlay):
@@ -460,78 +484,128 @@ def create_ui():
     def format_time(time):
         return f"{time:04d}"[:2] + ":" + f"{time:04d}"[2:]
     
-    def apply_changes(number_of_runways, inbound_flow, outbound_flow, speed_multiplier, max_wait_time, min_fuel_level):
-        # TODO: here will be the code to update the simulation paramters
-        pass
+    def apply_changes(engine, number_of_runways, inbound_flow, outbound_flow, speed_multiplier, max_wait_time, min_fuel_level, rate_of_emergencies):
+        #TODO: speed multiplier
+        params = SimulationParams(
+            num_runways = int(number_of_runways),
+            inbound_rate_per_hour = float(inbound_flow),
+            outbound_rate_per_hour = float(outbound_flow),
+            max_takeoff_wait_min = float(max_wait_time),
+            arrival_stddev_min=0,
+            departure_stddev_min=0,
+            emergencies_per_tick = 0,
+            tick_size_min = 1,
+            p_mechanical_failure = float(rate_of_emergencies) / 2,
+            p_passenger_illness = float(rate_of_emergencies) / 2,
+            fuel_emergency_min = 15,
+            fuel_min_min = float(min_fuel_level)
+            )
+        
+        stats = Statistics()
+        holding = HoldingQueue()
+        takeoff = TakeOffQueue()
+        runways = []
+        for x in range(1, int(number_of_runways) + 1):
+            runways.append( Runway(runway_id=x, runway_mode="MIXED", runway_status="AVAILABLE"))
+            
+        airport = Airport(runways=runways, holding=holding, takeoff=takeoff, stats=stats)
+        engine.params = params
+        engine.airport = airport
+        engine.stats = stats
+        engine.current_time = 0
     
-    # Take-off Queue Column
-    x_pos = margin_x
-    takeoff_queue_frame = create_section(root, x_pos, margin_y, col_w_standard, top_col_h, "Take-off Queue", scrollable = True)
+    def build_interface():
+        # Take-off Queue Column
+        x_pos = margin_x
+        takeoff_queue_frame = create_section(root, x_pos, margin_y, col_w_standard, top_col_h, "Take-off Queue", scrollable = True)
 
-    #Testing code: would actually loop through the real takeoff queue
-    for x in range(20):
-        test_plane = Aircraft("1", "OUTBOUND", 1200, 30)
-        create_plane_widget(takeoff_queue_frame, test_plane)
-   
-    # Holding Queue Column
-    x_pos += col_w_standard + gap
-    holding_queue_frame = create_section(root, x_pos, margin_y, col_w_standard, top_col_h, "Holding Queue", scrollable = True)
+        # Holding Queue Column
+        x_pos += col_w_standard + gap
+        holding_queue_frame = create_section(root, x_pos, margin_y, col_w_standard, top_col_h, "Holding Queue", scrollable = True)
     
-    #Testing code: would actually loop through the real holding queue
-    for x in range(7):
-        test_plane = Aircraft("1", "INBOUND", 1201, 30)
-        create_plane_widget(holding_queue_frame, test_plane)
-   
-    # Display Area
-    x_pos += col_w_standard + gap
-    create_section(root, x_pos, margin_y, col_w_display, col_w_display, "Display", title = False)
+        # Display Area
+        x_pos += col_w_standard + gap
+        display_area_frame = create_section(root, x_pos, margin_y, col_w_display, col_w_display, "Display", title = False)
+        
+        # display info constants
+        display_info_x_pos = x_pos
+        y_pos_3_2 = margin_y + col_w_display + gap
+        h_3_2 = top_col_h - col_w_display - gap
+
+        # Default/nothing clicked display area
+        display_info_frame = create_section(root, x_pos, y_pos_3_2, col_w_display, h_3_2, "Nothing Selected - Click on an Aircraft \n or Runway")
+        info_frame = tk.Frame(display_info_frame, bg = lightest_grey)
+        info_frame.place(x=0, y= 52, relwidth=1, relheight=1)
+
+        # Runways Column
+        x_pos += col_w_display + gap
+        runway_queue_frame = create_section(root, x_pos, margin_y, col_w_standard, top_col_h, "Runways", scrollable = True)
     
-    # display info constants
-    display_info_x_pos = x_pos
-    y_pos_3_2 = margin_y + col_w_display + gap
-    h_3_2 = top_col_h - col_w_display - gap
+        # Control Panel
+        panel_w = window_w - (2 * margin_x)
+        panel_y = window_h - margin_y - panel_h
+        control_panel_frame = create_section(root, margin_x, panel_y, panel_w, panel_h, "Control Panel", title = False)
+        
+        time = tk.Label(control_panel_frame, text=0, bg=lightest_grey, fg=text_color, font=("Arial", 14, "bold"))
+        time.grid(column = 0, row = 0, sticky = "w", padx = 5, pady = 5)
 
-    # Default/nothing clicked display area
-    display_info_frame = create_section(root, x_pos, y_pos_3_2, col_w_display, h_3_2, "Nothing Selected - Click on an Aircraft \n or Runway")
-    info_frame = tk.Frame(display_info_frame, bg = lightest_grey)
-    info_frame.place(x=0, y= 52, relwidth=1, relheight=1)
+        pause_button = tk.Button(control_panel_frame, text="Pause/Continue [P]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: pause())
+        pause_button.grid(column = 1, row = 0, sticky = "w", padx = 5, pady = 5)
 
-    # Runways Column
-    x_pos += col_w_display + gap
-    runway_queue_frame = create_section(root, x_pos, margin_y, col_w_standard, top_col_h, "Runways", scrollable = True)
-    #Testing code: would actually loop through each runway
-    for x in range(20):
-        test_plane = Aircraft("1", "INBOUND", 1201, 5000)
-        test_runway = Runway(x, "MIXED", "AVAILABLE")
-        if (x%2==0):
-            test_runway.currentAircraft = test_plane
-        create_runway_widget(runway_queue_frame, test_runway)
-   
-    # Control Panel
-    panel_w = window_w - (2 * margin_x)
-    panel_y = window_h - margin_y - panel_h
-    control_panel_frame = create_section(root, margin_x, panel_y, panel_w, panel_h, "Control Panel", title = False)
+        simulation_settings_button = tk.Button(control_panel_frame, text="Simulation Settings [S]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_simulation_settings())
+        simulation_settings_button.grid(column = 2, row = 0, sticky = "w", padx = 5, pady = 5)
+
+        view_statistics_button = tk.Button(control_panel_frame, text="View Statistics [V]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_statistics())
+        view_statistics_button.grid(column = 3, row = 0, sticky = "w", padx = 5, pady = 5)
+
+        reset_simulation_button = tk.Button(control_panel_frame, text="Reset Simulation [R]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: reset_simulation())
+        reset_simulation_button.grid(column = 4, row = 0, sticky = "w", padx = 5, pady = 5)
+        
+        # Starts the simulation by showing the settings first. 
+        create_simulation_settings()
+
+        return takeoff_queue_frame, holding_queue_frame, display_area_frame, display_info_frame, runway_queue_frame, time
+
+    def reload_widgets(queue, frame, runway = False):
+        for widget in frame.winfo_children():
+            widget.destroy()
+        for x in queue:
+            create_runway_widget(frame, x)
     
-    #testing code: placeholder time, should pull from simulation
-    time = tk.Label(control_panel_frame, text=format_time(1159), bg=lightest_grey, fg=text_color, font=("Arial", 14, "bold"))
-    time.grid(column = 0, row = 0, sticky = "w", padx = 5, pady = 5)
 
-    pause_button = tk.Button(control_panel_frame, text="Pause [P]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: pause())
-    pause_button.grid(column = 1, row = 0, sticky = "w", padx = 5, pady = 5)
+    def update_plane_queue(queue, frame, widget_dict):
+        current_ids = set()
 
-    simulation_settings_button = tk.Button(control_panel_frame, text="Simulation Settings [S]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_simulation_settings())
-    simulation_settings_button.grid(column = 2, row = 0, sticky = "w", padx = 5, pady = 5)
+        for plane in queue:
+            pid = plane.callsign
+            current_ids.add(pid)
 
-    view_statistics_button = tk.Button(control_panel_frame, text="View Statistics [V]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: create_statistics())
-    view_statistics_button.grid(column = 3, row = 0, sticky = "w", padx = 5, pady = 5)
+            if pid not in widget_dict:
+                widget_dict[pid] = create_plane_widget(frame, plane)
 
-    reset_simulation_button = tk.Button(control_panel_frame, text="Reset Simulation [R]", bg=lightest_grey, font=("Arial", 10, "bold", "underline"), padx=5, justify = "left", anchor = "w", relief="flat", command=lambda: reset_simulation())
-    reset_simulation_button.grid(column = 4, row = 0, sticky = "w", padx = 5, pady = 5)
+            update_plane_widget(widget_dict[pid], plane)
+
+        for pid in list(widget_dict):
+            if pid not in current_ids:
+                widget_dict[pid]["frame"].destroy()
+                del widget_dict[pid]
+
+    takeoff_queue_frame, holding_queue_frame, display_area_frame, display_info_frame, runway_queue_frame, time = build_interface()
     
-    # Starts the simulation by showing the settings first. 
-    create_simulation_settings()
+    def update_ui():
+        update_plane_queue(engine.get_holding_queue(), holding_queue_frame, holding_plane_widgets)
+        update_plane_queue(engine.get_takeoff_queue(), takeoff_queue_frame, takeoff_plane_widgets)
+        reload_widgets(engine.get_runways(), runway_queue_frame, True)
+        time.config(text=f"Tick: {engine.get_time()}")
+
+    def simulation_tick():
+        engine.tick()
+        update_ui()
+        root.after(1000, simulation_tick)
+
+    simulation_tick()
+
     # Run application
     root.mainloop()
 
-if __name__ == "__main__":
-    create_ui()
+

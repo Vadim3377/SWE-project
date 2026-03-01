@@ -141,8 +141,6 @@ def inject_test_aircraft(engine: SimulationEngine) -> None:
     a1 = Aircraft("T1", "INBOUND", scheduledTime=now, fuelRemaining=14, emergency=EmergencyType(fuel_emergency=True))
     a2 = Aircraft("T2", "INBOUND", scheduledTime=now, fuelRemaining=12, emergency=EmergencyType(fuel_emergency=True))
     a3 = Aircraft("T3", "INBOUND", scheduledTime=now, fuelRemaining=18, emergency=EmergencyType(fuel_emergency=True))
-
-
     a4 = Aircraft("T4", "INBOUND", scheduledTime=now, fuelRemaining=50, emergency=EmergencyType(mechanical_failure=True))
 
     # Non-emergency inbound
@@ -165,9 +163,11 @@ def main() -> None:
     inject_test_aircraft(engine)
 
     # Run a few ticks with detailed printing
-    for _ in range(15):
-        print_state(engine)
-        engine.tick()
+    # for _ in range(15):
+    #     print_state(engine)
+    #     engine.tick()
+    
+    create_ui(engine)
 
     # Final report
     print("\n" + "#" * 90)
