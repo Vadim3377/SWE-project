@@ -60,15 +60,15 @@ class Statistics:
     def sample_inbound_spawn_time(self, scheduled_time_min: int) -> int:
         sigma = float(self._arrival_stddev_min)
         jitter = self._rng.gauss(0.0, sigma) if sigma > 0 else 0.0
-        spawn = int(scheduled_time_min) + self._round_to_tick(jitter)
-        return max(0, spawn) # Ensure time is never negative
+        spawn = int(round(int(scheduled_time_min) + jitter))
+        return max(0, spawn)
 
     # Applies normal-distributed jitter to an outbound flight's scheduled time
     def sample_outbound_spawn_time(self, scheduled_time_min: int) -> int:
         sigma = float(self._departure_stddev_min)
         jitter = self._rng.gauss(0.0, sigma) if sigma > 0 else 0.0
-        spawn = int(scheduled_time_min) + self._round_to_tick(jitter)
-        return max(0, spawn) # Ensure time is never negative
+        spawn = int(round(int(scheduled_time_min) + jitter))
+        return max(0, spawn)
 
     # Records queue sizes at the current tick for calculating maximums and averages
     def snapshot_queues(self, holding_size: int, takeoff_size: int, time: int) -> None:
