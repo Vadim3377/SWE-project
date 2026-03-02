@@ -1,11 +1,8 @@
-# things still TODO:
-# Angelina:
-# reset simulation 
-# time
 
 import tkinter as tk
 import time
-from tkinter import ttk
+from PIL import Image, ImageTk
+from tkinter import ttk, PhotoImage
 from backend.SimulationParameters import SimulationParams
 from backend.SimulationEngine import SimulationEngine, EmergencyType
 from backend.statistics import Statistics
@@ -586,6 +583,19 @@ class AirportUI:
                     self.selected_widget = None
                 del widget_dict[pid]
 
+    def update_display_plane(self, airplane):
+        plane_icon = PhotoImage(file="assets/plane_icon.png")
+        plane_icon_label = tk.Label(self.display_area_frame, plane_icon)
+        plane_icon_label.pack()
+        #plane_icon = plane_icon.rotate(45, Image.BICUBIC, expand = True)
+        #plane_icon.show
+        pass
+
+    def update_display_runway(self, runway):
+        pass
+
+        
+
     def create_plane_widget(self, queue_column, plane):
         widget_frame = tk.Frame(queue_column, bg=self.lightest_grey, padx=5, pady=5, cursor="hand2")
         widget_frame.pack(fill="x", pady=4, padx=(4, 22))
@@ -617,6 +627,7 @@ class AirportUI:
         def on_click(e):
             self.select_widget(widget_ref)
             self.show_airplane_info(plane)
+            self.update_display_plane(plane)
 
         widget_frame.bind("<Button-1>", on_click)
         for lbl in (tl, tr, ml, mr, bl, br): lbl.bind("<Button-1>", on_click)
@@ -687,6 +698,7 @@ class AirportUI:
             if rw.status == "AVAILABLE":
                 self.select_widget(widget_ref)
             self.show_runway_info(rw)
+            self.update_display_runway(rw)
 
         widget_frame.bind("<Button-1>", on_click)
         for lbl in (tl, bl, br): lbl.bind("<Button-1>", on_click)
@@ -775,6 +787,13 @@ class AirportUI:
         self.update_ui()
 
     # --- Info Displays ---
+
+    def show_aircraft_in_display(self, airplane):
+        # Clear all the widgets in the display area and rebuild
+        for w in self.display_area_frame.winfo_children(): w.destroy()
+        tk.Frame(self.display_area_frame, text=display_airplane_caption, bg="black", fg="white", font=("Arial", 12, "bold", "underline"), ipadx=5, relief="flat", height = 39).grid(column=0, row=0, sticky="s")
+
+
 
     def show_airplane_info(self, airplane):
         # Clear whatever was shown before and rebuild with this aircraft's data.
