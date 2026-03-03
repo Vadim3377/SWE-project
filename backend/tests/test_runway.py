@@ -35,7 +35,7 @@ def test_isAvailable_unoccupied_available():
 def test_isAvailable_occupied_available():
     #occupied = currentAircraft is not None
     r = Runway("R1", "MIXED")
-    r.currentAircraft = TempAircraft("A1")
+    r.occupancy = "OCCUPIED"
 
     assert r.isAvailable() is False
 

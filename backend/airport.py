@@ -23,13 +23,13 @@ class Airport:
         # TAKEOFF-only first, then MIXED
         return sorted(self.runways, key=lambda r: 0 if r.mode == "TAKEOFF" else (1 if r.mode == "MIXED" else 2))
 
-    def handleInbound(self, aircraft, now: int):
-        self.stats.record_holding_entry(aircraft, now)
-        self.holding.enqueue(aircraft, now)
+    def handleInbound(self, aircraft, time: int):
+        self.stats.record_holding_entry(aircraft, time)
+        self.holding.enqueue(aircraft, time)
 
-    def handleOutbound(self, aircraft, now: int):
-        self.stats.record_takeoff_enqueue(aircraft, now)
-        self.takeoff.enqueue(aircraft, now)
+    def handleOutbound(self, aircraft, time: int):
+        self.stats.record_takeoff_enqueue(aircraft, time)
+        self.takeoff.enqueue(aircraft, time)
 
     def assignLanding(self, time: SimTime) -> None:
         """
