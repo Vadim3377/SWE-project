@@ -27,6 +27,8 @@ class AirportUI:
         self.pending_status_changes = {}
         # Keeps track of whichever plane/runway widget is currently highlighted.
         self.selected_widget = None
+        self.last_saved_report = None  # dict from engine.get_report()
+        self.last_saved_time = None  # minutes (engine.get_time())
         
         # Speed multiplier lives on the engine rather than in the frozen SimulationParams.
         if not hasattr(self.engine, 'speed_multiplier'):
@@ -105,6 +107,23 @@ class AirportUI:
         self.root.bind("v", lambda x: self.open_statistics())
         self.root.bind("R", lambda x: self.reset_simulation())
         self.root.bind("r", lambda x: self.reset_simulation())
+        self.root.bind("X", lambda x: self.stop_simulation())
+        self.root.bind("x", lambda x: self.stop_simulation())
+
+    def stop_simulation(self):
+        # Pause and cancel scheduled callbacks so it truly stops.
+        self.toggle_pause(force_pause=True)
+
+        # Snapshot report + time
+        try:
+            self.last_saved_report = self.engine.get_report()
+            self.last_saved_time = self.engine.get_time()
+        except Exception:
+            self.last_saved_report = None
+            self.last_saved_time = None
+
+        # Optional: pop open the statistics window immediately
+        self.open_statistics(show_saved=True)
 
     # --- UI Builders ---
 
@@ -211,6 +230,15 @@ class AirportUI:
         tk.Button(control_panel_frame, text="Simulation Settings [S]", bg=self.lightest_grey, font=("Arial", 12, "bold", "underline"), padx=5, relief="flat", command=self.open_simulation_settings).grid(column=2, row=0, sticky="nsew", padx=5, pady=7)
         tk.Button(control_panel_frame, text="View Statistics [V]", bg=self.lightest_grey, font=("Arial", 12, "bold", "underline"), padx=5, relief="flat", command=self.open_statistics).grid(column=3, row=0, sticky="nsew", padx=5, pady=7)
         tk.Button(control_panel_frame, text="Reset Simulation [R]", bg=self.lightest_grey, font=("Arial", 12, "bold", "underline"), padx=5, relief="flat", command=self.reset_simulation).grid(column=4, row=0, sticky="nsew", padx=5, pady=7)
+        tk.Button(
+            control_panel_frame,
+            text="Stop [X]",
+            bg=self.lightest_grey,
+            font=("Arial", 12, "bold", "underline"),
+            padx=5,
+            relief="flat",
+            command=self.stop_simulation
+        ).grid(column=5, row=0, sticky="nsew", padx=5, pady=7)
 
     # --- Popups (Using Toplevel) ---
     
@@ -296,7 +324,7 @@ class AirportUI:
 
         tk.Button(container, text="Apply Changes", bg=self.medium_grey, fg="white", font=("Arial", 12, "bold"), command=apply).grid(row=8, column=0, columnspan=2, pady=20, ipadx=20)
 
-    def open_statistics(self, event=None):
+    def open_statistics(self, event=None, show_saved=False):
         # Bring an existing stats window to the front rather than opening a duplicate.
         if hasattr(self, 'stats_win') and self.stats_win.winfo_exists():
             self.stats_win.lift()
@@ -315,7 +343,13 @@ class AirportUI:
         tk.Label(container, text="Live Statistical Report", font=("Arial", 16, "bold"), bg=self.lightest_grey).grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         # Pull a snapshot of stats from the engine at the moment the dialog opens.
-        report_data = self.engine.get_report()
+        report_data = None
+
+        # Prefer saved report if requested OR if we have one and the current sim is "new"
+        if show_saved and self.last_saved_report is not None:
+            report_data = dict(self.last_saved_report)
+        else:
+            report_data = self.engine.get_report()
 
         def add_stat(row, label, val):
             if isinstance(val, float):
@@ -342,15 +376,24 @@ class AirportUI:
         add_stat(3, "Max holding queue wait time (m):", report_data.get("maxArrivalDelay", 0))
         add_stat(4, "Avg holding queue wait time (m):", report_data.get("avgHoldingTime", 0))
         add_stat(5, "Max take off queue size:", report_data.get("maxTakeoffQueue", 0))
-        add_stat(6, "Avg take off queue size:", report_data.get("avgArrivalDelay", 0))
+        add_stat(6, "Avg take off queue size:", report_data.get("avgTakeoffQueue", 0))
         add_stat(7, "Max take off queue wait time (m):", report_data.get("maxTakeoffWait", 0))
         add_stat(8, "Avg take off queue wait time (m):", report_data.get("avgTakeoffWait", 0))
         add_stat(9, "Total inbound diversions:", report_data.get("diversions", 0))
         add_stat(10, "Total outbound cancellations:", report_data.get("cancellations", 0))
-        add_stat(11, "Total simulation time:", self.format_time(self.engine.get_time()))
+        sim_time = self.engine.get_time()
+        if show_saved and self.last_saved_time is not None:
+            sim_time = self.last_saved_time
+        add_stat(11, "Total simulation time:", self.format_time(sim_time))
         
         # Closing the stats window resumes the simulation automatically.
         tk.Button(container, text="Close", bg=self.medium_grey, fg="white", font=("Arial", 12, "bold"), command=lambda: [self.stats_win.destroy(), self.toggle_pause(force_play=True)]).grid(row=12, column=0, columnspan=2, pady=20, ipadx=20)
+        if self.engine.get_time() == 0 and self.last_saved_report is not None:
+            report_data = dict(self.last_saved_report)
+            sim_time = self.last_saved_time or 0
+        else:
+            report_data = self.engine.get_report()
+            sim_time = self.engine.get_time()
 
     # --- Data Application & Runway Degradation ---
 
@@ -496,6 +539,9 @@ class AirportUI:
         # Refresh the empty UI, then let the user reconfigure before restarting.
         self.update_ui()
         self.open_simulation_settings()
+        if self.last_saved_report is not None:
+            self.open_statistics(show_saved=True)
+
 
     def simulation_tick(self):
         if self.engine.is_paused: 
