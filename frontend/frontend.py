@@ -5,6 +5,7 @@ from PIL import Image, ImageTk
 from tkinter import ttk, PhotoImage
 from backend.SimulationParameters import SimulationParams
 from backend.SimulationEngine import SimulationEngine, EmergencyType
+from backend.report import read_last_report, DEFAULT_STATS_CSV_PATH, append_report_csv
 from backend.statistics import Statistics
 from backend.queues import HoldingQueue, TakeOffQueue
 from backend.runway import Runway
@@ -15,7 +16,7 @@ class AirportUI:
     def __init__(self, root, engine):
         self.root = root
         self.engine = engine
-        
+
         # Tracks the scheduled after() IDs so we can cancel them on pause.
         self.sim_loop_id = None
         self.smooth_loop_id = None
@@ -27,11 +28,13 @@ class AirportUI:
         self.pending_status_changes = {}
         # Keeps track of whichever plane/runway widget is currently highlighted.
         self.selected_widget = None
-        
+        self.last_saved_report = None  # dict from engine.get_report()
+        self.last_saved_time = None  # minutes (engine.get_time())
+
         # Speed multiplier lives on the engine rather than in the frozen SimulationParams.
         if not hasattr(self.engine, 'speed_multiplier'):
             self.engine.speed_multiplier = 1.0
-        
+
         # Dictionaries that map IDs to their corresponding UI widget bundles.
         self.holding_plane_widgets = {}
         self.takeoff_plane_widgets = {}
@@ -44,7 +47,7 @@ class AirportUI:
         # UI not built yet — settings first
         self.ui_built = False
         self.open_simulation_settings()
-        
+
     def setup_window(self):
         # Use nearly the full screen, leaving a small border on each side.
         self.window_w = self.root.winfo_screenwidth() - 100
@@ -54,7 +57,7 @@ class AirportUI:
         self.margin_x = self.window_w / 96
         self.margin_y = self.window_h / 54
         self.gap = self.window_w / 120
-        
+
         # The two standard columns (queues) are narrower than the central display column.
         self.col_w_standard = self.window_w * (7/32)
         self.col_w_display = self.window_w * (143/480)
@@ -62,7 +65,7 @@ class AirportUI:
         self.panel_h = 54
         # Top columns fill whatever vertical space remains after the panel.
         self.top_col_h = self.window_h - (2 * self.margin_y) - self.panel_h - self.gap
-        
+
         # Colour palette used throughout the UI.
         self.dark_grey = "#2b2b2b"
         self.medium_grey = "#404040"
@@ -70,7 +73,7 @@ class AirportUI:
         self.lightest_grey = "#A6A4A4"
         self.text_color = "#000000"
         self.emergency_text_color = "#5c0000"  # Dark red used to flag emergencies.
-        
+
         self.root.title("Airport Simulation")
         self.root.geometry(f"{int(self.window_w)}x{int(self.window_h)}")
         self.root.configure(bg=self.dark_grey)
@@ -83,7 +86,7 @@ class AirportUI:
         # Shared settings applied to every progress bar style.
         common_bar_settings = {
             "thickness": 20,
-            "troughcolor": "#797979", 
+            "troughcolor": "#797979",
             "bordercolor": "#797979",
         }
 
@@ -105,6 +108,30 @@ class AirportUI:
         self.root.bind("v", lambda x: self.open_statistics())
         self.root.bind("R", lambda x: self.reset_simulation())
         self.root.bind("r", lambda x: self.reset_simulation())
+        self.root.bind("X", lambda x: self.stop_simulation())
+        self.root.bind("x", lambda x: self.stop_simulation())
+
+    def stop_simulation(self):
+        # Pause and cancel scheduled callbacks so it truly stops.
+        self.toggle_pause(force_pause=True)
+
+        # Snapshot report + time
+        try:
+            self.last_saved_report = self.engine.get_report()
+            self.last_saved_time = self.engine.get_time()
+
+            # Persist snapshot to CSV on every stop
+            try:
+                append_report_csv(self.last_saved_report or {}, int(self.last_saved_time or 0), DEFAULT_STATS_CSV_PATH)
+            except Exception as e:
+                # Do not crash UI if persistence fails
+                print(f"CSV save failed: {e}")
+        except Exception:
+            self.last_saved_report = None
+            self.last_saved_time = None
+
+        # Show the final statistics snapshot and let the user decide what to do next.
+        self.open_statistics(show_saved=True, stop_flow=True)
 
     # --- UI Builders ---
 
@@ -112,7 +139,7 @@ class AirportUI:
         # Outer frame provides the medium-grey border effect.
         outer_frame = tk.Frame(parent, bg=self.medium_grey, width=w, height=h)
         outer_frame.place(x=x, y=y)
-        
+
         # Inner frame sits 4 px inside the outer, giving the illusion of a border.
         inset = 4
         inner_w = w - (inset * 2)
@@ -123,7 +150,7 @@ class AirportUI:
         if title:
             # Title bar spans the full width at the top of the inner frame.
             tk.Label(inner_frame, text=name, bg=self.lightest_grey, fg=self.text_color, font=("Arial", 14, "bold")).place(relx=0, rely=0, relwidth=1, anchor="nw")
-        
+
         if not scrollable:
             return inner_frame
 
@@ -171,7 +198,7 @@ class AirportUI:
         canvas.configure(yscrollcommand=scrollbar.set)
         # Place the canvas below the 40 px title bar.
         canvas.place(x=0, y=40, relwidth=1, height=inner_h - 40)
-        
+
         return scrollable_inner_frame
 
     def build_interface(self):
@@ -182,11 +209,11 @@ class AirportUI:
         # Column 2: holding queue next to it.
         x_pos += self.col_w_standard + self.gap
         self.holding_queue_frame = self.create_section(self.root, x_pos, self.margin_y, self.col_w_standard, self.top_col_h, "Holding Queue", scrollable=True)
-    
+
         # Column 3 top: square display area for the airport visualisation.
         x_pos += self.col_w_standard + self.gap
         self.display_area_frame = self.create_section(self.root, x_pos, self.margin_y, self.col_w_display, self.col_w_display, "Display", title=False)
-        
+
         # Column 3 bottom: detail panel shown when a plane or runway is selected.
         y_pos_3_2 = self.margin_y + self.col_w_display + self.gap
         h_3_2 = self.top_col_h - self.col_w_display - self.gap
@@ -195,13 +222,13 @@ class AirportUI:
         # Column 4: runway list on the far right.
         x_pos += self.col_w_display + self.gap
         self.runway_queue_frame = self.create_section(self.root, x_pos, self.margin_y, self.col_w_standard, self.top_col_h, "Runways", scrollable=True)
-    
+
         # Bottom strip: fixed-height control panel spanning the full width.
         panel_w = self.window_w - (2 * self.margin_x)
         panel_y = self.window_h - self.margin_y - self.panel_h
         control_panel_frame = self.create_section(self.root, self.margin_x, panel_y, panel_w, self.panel_h, "Control Panel", title=False)
         control_panel_frame.rowconfigure(0, weight=1)
-        
+
         # Clock display on the far left of the control panel.
         self.clock_label = tk.Label(control_panel_frame, text="00:00", bg=self.lightest_grey, fg=self.text_color, font=("Arial", 17, "bold"))
         self.clock_label.grid(column=0, row=0, sticky="nsew", padx=[7,5], pady=7, ipadx=5)
@@ -211,15 +238,24 @@ class AirportUI:
         tk.Button(control_panel_frame, text="Simulation Settings [S]", bg=self.lightest_grey, font=("Arial", 12, "bold", "underline"), padx=5, relief="flat", command=self.open_simulation_settings).grid(column=2, row=0, sticky="nsew", padx=5, pady=7)
         tk.Button(control_panel_frame, text="View Statistics [V]", bg=self.lightest_grey, font=("Arial", 12, "bold", "underline"), padx=5, relief="flat", command=self.open_statistics).grid(column=3, row=0, sticky="nsew", padx=5, pady=7)
         tk.Button(control_panel_frame, text="Reset Simulation [R]", bg=self.lightest_grey, font=("Arial", 12, "bold", "underline"), padx=5, relief="flat", command=self.reset_simulation).grid(column=4, row=0, sticky="nsew", padx=5, pady=7)
+        tk.Button(
+            control_panel_frame,
+            text="Stop [X]",
+            bg=self.lightest_grey,
+            font=("Arial", 12, "bold", "underline"),
+            padx=5,
+            relief="flat",
+            command=self.stop_simulation
+        ).grid(column=5, row=0, sticky="nsew", padx=5, pady=7)
 
     # --- Popups (Using Toplevel) ---
-    
+
     def open_simulation_settings(self, event=None):
         # Bring an existing settings window to the front rather than opening a duplicate.
         if hasattr(self, 'settings_win') and self.settings_win.winfo_exists():
             self.settings_win.lift()
             return
-            
+
         # Pause while the user adjusts settings so nothing runs in the background.
         self.toggle_pause(force_pause=True)
 
@@ -230,12 +266,12 @@ class AirportUI:
         self.settings_win.grab_set()  # Block interaction with the main window.
         self.settings_win.resizable(False, False)
         self.settings_win.protocol("WM_DELETE_WINDOW", self.root.destroy)
-        
+
         container = tk.Frame(self.settings_win, bg=self.lightest_grey, padx=20, pady=20)
         container.pack(fill="both", expand=True, padx=10, pady=10)
-        
+
         tk.Label(container, text="Adjust Simulation Parameters", font=("Arial", 16, "bold"), bg=self.lightest_grey).grid(row=0, column=0, columnspan=2, pady=(0, 20))
-        
+
         entries = {}
         def add_setting(row, label_text, default_val):
             # Helper that adds a label/entry pair and registers the entry in the dict.
@@ -249,7 +285,7 @@ class AirportUI:
         p = getattr(self.engine, 'params', None)
         curr_runways = len(self.engine.airport.runways) if hasattr(self.engine, 'airport') else 3
         curr_speed = getattr(self.engine, 'speed_multiplier', 1.0)
-        
+
         add_setting(1, "Number Of Runways:", curr_runways)
         add_setting(2, "Inbound flow (per hour):", getattr(p, 'inbound_rate_per_hour', 10) if p else 10)
         add_setting(3, "Outbound flow (per hour):", getattr(p, 'outbound_rate_per_hour', 10) if p else 10)
@@ -296,7 +332,7 @@ class AirportUI:
 
         tk.Button(container, text="Apply Changes", bg=self.medium_grey, fg="white", font=("Arial", 12, "bold"), command=apply).grid(row=8, column=0, columnspan=2, pady=20, ipadx=20)
 
-    def open_statistics(self, event=None):
+    def open_statistics(self, event=None, show_saved=False, stop_flow=False):
         # Bring an existing stats window to the front rather than opening a duplicate.
         if hasattr(self, 'stats_win') and self.stats_win.winfo_exists():
             self.stats_win.lift()
@@ -304,53 +340,193 @@ class AirportUI:
 
         self.toggle_pause(force_pause=True)
         self.stats_win = tk.Toplevel(self.root)
-        self.stats_win.title("Statistical Report")
+        self.stats_win.title("Statistical Report" if not stop_flow else "Simulation Stopped - Statistics")
         self.stats_win.geometry("500x450")
         self.stats_win.configure(bg=self.dark_grey)
         self.stats_win.grab_set()
-        
+
+        # In stop-flow, closing the window should NOT auto-resume the simulation.
+        if stop_flow:
+            self.stats_win.protocol("WM_DELETE_WINDOW", self.stats_win.destroy)
+        else:
+            # Default behaviour: close resumes play.
+            self.stats_win.protocol("WM_DELETE_WINDOW",
+                                    lambda: [self.stats_win.destroy(), self.toggle_pause(force_play=True)])
+
         container = tk.Frame(self.stats_win, bg=self.lightest_grey, padx=20, pady=20)
         container.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        tk.Label(container, text="Live Statistical Report", font=("Arial", 16, "bold"), bg=self.lightest_grey).grid(row=0, column=0, columnspan=2, pady=(0, 20))
-        
-        # Pull a snapshot of stats from the engine at the moment the dialog opens.
-        report_data = self.engine.get_report()
 
-        def add_stat(row, label, val):
-            if isinstance(val, float):
-                display = f"{val:.2f}"
-            else:
-                display = str(val)
+        header = "Live Statistical Report" if not stop_flow else "Simulation Stopped - Statistics"
+        tk.Label(container, text=header, font=("Arial", 16, "bold"), bg=self.lightest_grey).grid(
+            row=0, column=0, columnspan=2, pady=(0, 10)
+        )
 
-            tk.Label(
+        # --- Multi-tab statistics view ---
+        # Tab 1: Current simulation
+        # Tabs 2..N: Previous simulations loaded from the statistics CSV (one tab per saved run)
+
+        notebook = ttk.Notebook(container)
+        notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        container.grid_rowconfigure(1, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_columnconfigure(1, weight=1)
+
+        def _safe_num(v, default=0):
+            # Normalize NaN/None/'' to default
+            try:
+                if v is None:
+                    return default
+                if isinstance(v, str) and v.strip() == "":
+                    return default
+                fv = float(v)
+                # NaN check (NaN != NaN)
+                if fv != fv:
+                    return default
+                return fv
+            except Exception:
+                return default
+
+        def _render_report(parent, report_data, sim_time_min=None):
+            """Render one report dict inside parent."""
+            report_data = report_data or {}
+
+            frame = tk.Frame(parent, bg=self.lightest_grey)
+            frame.pack(fill="both", expand=True)
+            frame.grid_columnconfigure(0, weight=1)
+            frame.grid_columnconfigure(1, weight=1)
+
+            def add_stat(row, label, val):
+                # Clean NaNs coming from CSV
+                if isinstance(val, (int, float)):
+                    val = _safe_num(val, 0)
+                display = f"{val:.2f}" if isinstance(val, float) else str(val)
+
+                tk.Label(frame, text=label, bg=self.lightest_grey, font=("Arial", 11, "bold")).grid(
+                    row=row, column=0, sticky="w", pady=2
+                )
+                tk.Label(frame, text=display, bg=self.lightest_grey, font=("Arial", 11)).grid(
+                    row=row, column=1, sticky="e", pady=2
+                )
+
+            add_stat(0, "Max holding queue size:", _safe_num(report_data.get("maxHoldingQueue", 0), 0))
+            add_stat(1, "Avg holding queue size:", _safe_num(report_data.get("avgHoldingQueue", 0), 0))
+            add_stat(2, "Max holding queue wait time (m):", _safe_num(report_data.get("maxArrivalDelay", 0), 0))
+            add_stat(3, "Avg holding queue wait time (m):", _safe_num(report_data.get("avgHoldingTime", 0), 0))
+            add_stat(4, "Max take off queue size:", _safe_num(report_data.get("maxTakeoffQueue", 0), 0))
+            add_stat(5, "Avg take off queue size:", _safe_num(report_data.get("avgTakeoffQueue", 0), 0))
+            add_stat(6, "Max take off queue wait time (m):", _safe_num(report_data.get("maxTakeoffWait", 0), 0))
+            add_stat(7, "Avg take off queue wait time (m):", _safe_num(report_data.get("avgTakeoffWait", 0), 0))
+            add_stat(8, "Total inbound diversions:", int(_safe_num(report_data.get("diversions", 0), 0)))
+            add_stat(9, "Total outbound cancellations:", int(_safe_num(report_data.get("cancellations", 0), 0)))
+
+            if sim_time_min is None:
+                sim_time_min = _safe_num(report_data.get("sim_time_min", self.engine.get_time()), 0)
+            add_stat(10, "Total simulation time:", self.format_time(int(_safe_num(sim_time_min, 0))))
+
+            # Optional: show saved timestamp if present (from CSV)
+            if isinstance(report_data, dict) and report_data.get("saved_at_utc"):
+                tk.Label(
+                    frame,
+                    text=f"Saved at (UTC): {report_data.get('saved_at_utc')}",
+                    bg=self.lightest_grey,
+                    font=("Arial", 9)
+                ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(10, 0))
+
+        # Current tab
+        if stop_flow or show_saved:
+            # Prefer the persisted final snapshot (the one we save on Stop)
+            try:
+                current_report = dict(read_last_report(DEFAULT_STATS_CSV_PATH) or {})
+            except Exception:
+                current_report = dict(self.last_saved_report) if self.last_saved_report is not None else {}
+            current_time = current_report.get(
+                "sim_time_min",
+                self.last_saved_time if self.last_saved_time is not None else self.engine.get_time()
+            )
+        else:
+            current_report = self.engine.get_report()
+            current_time = self.engine.get_time()
+
+        current_tab = tk.Frame(notebook, bg=self.lightest_grey)
+        notebook.add(current_tab, text="Current")
+        _render_report(current_tab, current_report, current_time)
+
+        # Previous runs tabs (from CSV)
+        def _read_all_reports_csv(path):
+            import csv
+            rows = []
+            try:
+                with open(path, "r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for r in reader:
+                        rows.append(dict(r))
+            except Exception:
+                return []
+
+            # Normalize numeric fields where possible
+            for r in rows:
+                for k, v in list(r.items()):
+                    if k in ("saved_at_utc", "extra_json"):
+                        continue
+                    if isinstance(v, str) and v.strip() == "":
+                        r[k] = None
+                        continue
+                    try:
+                        r[k] = float(v)
+                    except Exception:
+                        pass
+            return rows
+
+        previous_runs = _read_all_reports_csv(DEFAULT_STATS_CSV_PATH)
+        # Sort newest-first by saved_at_utc if present
+        if previous_runs and previous_runs[0].get("saved_at_utc"):
+            previous_runs.sort(key=lambda r: (r.get("saved_at_utc") or ""), reverse=True)
+
+        # Add a tab per previous run. Keep it reasonable to avoid UI overload.
+        MAX_TABS = 12
+        for idx, run in enumerate(previous_runs[:MAX_TABS], start=1):
+            sim_t = int(_safe_num(run.get("sim_time_min", 0), 0))
+            title = f"Run {idx} ({self.format_time(sim_t)})"
+            tab = tk.Frame(notebook, bg=self.lightest_grey)
+            notebook.add(tab, text=title)
+            _render_report(tab, run, sim_t)
+
+        if stop_flow:
+            # Stop-flow: two buttons (Close / Reset Simulation). No auto-resume.
+            btn_row = 2
+            tk.Button(
                 container,
-                text=label,
-                bg=self.lightest_grey,
-                font=("Arial", 11, "bold")
-            ).grid(row=row, column=0, sticky="w", pady=2)
+                text="Close",
+                bg=self.medium_grey,
+                fg="white",
+                font=("Arial", 12, "bold"),
+                command=self.stats_win.destroy
+            ).grid(row=btn_row, column=0, pady=20, ipadx=20, sticky="ew")
 
-            tk.Label(
+            def _reset_from_stop():
+                # Close stats first (avoids grab/focus issues), then reset.
+                if hasattr(self, 'stats_win') and self.stats_win.winfo_exists():
+                    self.stats_win.destroy()
+                self.reset_simulation(open_settings=True)
+
+            tk.Button(
                 container,
-                text=display,
-                bg=self.lightest_grey,
-                font=("Arial", 11)
-            ).grid(row=row, column=1, sticky="e", pady=2)
-            
-        add_stat(1, "Max holding queue size:", report_data.get("maxHoldingQueue", 0))
-        add_stat(2, "Avg holding queue size:", report_data.get("avgHoldingQueue", 0))
-        add_stat(3, "Max holding queue wait time (m):", report_data.get("maxArrivalDelay", 0))
-        add_stat(4, "Avg holding queue wait time (m):", report_data.get("avgHoldingTime", 0))
-        add_stat(5, "Max take off queue size:", report_data.get("maxTakeoffQueue", 0))
-        add_stat(6, "Avg take off queue size:", report_data.get("avgArrivalDelay", 0))
-        add_stat(7, "Max take off queue wait time (m):", report_data.get("maxTakeoffWait", 0))
-        add_stat(8, "Avg take off queue wait time (m):", report_data.get("avgTakeoffWait", 0))
-        add_stat(9, "Total inbound diversions:", report_data.get("diversions", 0))
-        add_stat(10, "Total outbound cancellations:", report_data.get("cancellations", 0))
-        add_stat(11, "Total simulation time:", self.format_time(self.engine.get_time()))
-        
-        # Closing the stats window resumes the simulation automatically.
-        tk.Button(container, text="Close", bg=self.medium_grey, fg="white", font=("Arial", 12, "bold"), command=lambda: [self.stats_win.destroy(), self.toggle_pause(force_play=True)]).grid(row=12, column=0, columnspan=2, pady=20, ipadx=20)
+                text="Reset Simulation",
+                bg=self.medium_grey,
+                fg="white",
+                font=("Arial", 12, "bold"),
+                command=_reset_from_stop
+            ).grid(row=btn_row, column=1, pady=20, ipadx=20, sticky="ew")
+        else:
+            # Default: closing resumes the simulation automatically.
+            tk.Button(
+                container,
+                text="Close",
+                bg=self.medium_grey,
+                fg="white",
+                font=("Arial", 12, "bold"),
+                command=lambda: [self.stats_win.destroy(), self.toggle_pause(force_play=True)]
+            ).grid(row=2, column=0, columnspan=2, pady=20, ipadx=20)
 
     # --- Data Application & Runway Degradation ---
 
@@ -372,14 +548,14 @@ class AirportUI:
             fuel_emergency_min=15,
             fuel_min_min=int(min_fuel)
         )
-        
+
         # Speed multiplier is stored on the engine object, not inside SimulationParams.
         self.engine.speed_multiplier = speed_mult
         self.engine.params = params
 
         current_runways = list(self.engine.airport.runways)
         current_count = len(current_runways)
-        
+
         if num_runways > current_count:
             # Add new runways, continuing IDs from the current highest to avoid clashes.
             highest_id = max([r.id for r in current_runways]) if current_runways else 0
@@ -387,7 +563,7 @@ class AirportUI:
                 highest_id += 1
                 current_runways.append(Runway(runway_id=highest_id, runway_mode="MIXED"))
             self.engine.airport.runways = current_runways
-        
+
         elif num_runways < current_count:
             # Don't remove busy runways immediately; flag them and wait for them to clear.
             runways_to_flag = current_runways[num_runways:]
@@ -409,7 +585,7 @@ class AirportUI:
             self.engine.is_paused = False
         else:
             self.engine.is_paused = not self.engine.is_paused
-            
+
         if self.engine.is_paused:
             # Cancel any scheduled callbacks so no ticks fire while paused.
             if self.sim_loop_id:
@@ -424,7 +600,7 @@ class AirportUI:
             self.simulation_tick()
             self.smooth_update()
 
-    def reset_simulation(self):
+    def reset_simulation(self, open_settings=True):
         # Pause immediately so no ticks fire while we're tearing state down.
         self.toggle_pause(force_pause=True)
 
@@ -491,14 +667,24 @@ class AirportUI:
         ).place(relx=0.5, rely=0.5, anchor="center")
 
         # Explicitly mark the engine as running again before reopening settings.
-        self.engine.is_paused = False
+        #self.engine.is_paused = False
 
-        # Refresh the empty UI, then let the user reconfigure before restarting.
+        # Refresh the empty UI, then (optionally) let the user reconfigure before restarting.
         self.update_ui()
-        self.open_simulation_settings()
+
+
+
+        if open_settings:
+            # Keep paused: settings window will run and Apply will start the sim
+            self.open_simulation_settings()
+        else:
+            # Actually restart the tick + smooth loops
+            self.toggle_pause(force_play=True)
+
+
 
     def simulation_tick(self):
-        if self.engine.is_paused: 
+        if self.engine.is_paused:
             return
 
         self.engine.tick()
@@ -519,7 +705,7 @@ class AirportUI:
                 next_status, wf, pc, pgs = self.pending_status_changes.pop(r)
                 r.status = next_status
                 self._apply_status_visuals(next_status, wf, pc, pgs)
-                
+
         self.update_ui()
 
         # Scale the tick interval by the speed multiplier so faster speeds tick more often.
@@ -571,9 +757,9 @@ class AirportUI:
                     widget["progress"]["value"] = min(100, smooth_val)
                 else:
                     widget["progress"]["value"] = 0
-        except Exception as e: 
+        except Exception as e:
             pass  # Silently swallow errors here to avoid spamming the console.
-            
+
         # Schedule the next frame at roughly 60 fps (16 ms).
         self.smooth_loop_id = self.root.after(16, self.smooth_update)
 
@@ -584,7 +770,7 @@ class AirportUI:
         full_holding_list = active_inbound + self.engine.get_holding_queue()
         active_outbound = [r.currentAircraft for r in all_runways if r.currentAircraft and r.currentAircraft.type == "OUTBOUND"]
         full_takeoff_list = active_outbound + self.engine.get_takeoff_queue()
-        
+
         self.update_plane_queue(full_holding_list, self.holding_queue_frame, self.holding_plane_widgets)
         self.update_plane_queue(full_takeoff_list, self.takeoff_queue_frame, self.takeoff_plane_widgets)
         self.update_runway_queue(all_runways, self.runway_queue_frame, self.runway_widgets)
@@ -626,7 +812,7 @@ class AirportUI:
     def update_display_runway(self, runway):
         pass
 
-        
+
 
     def create_plane_widget(self, queue_column, plane):
         widget_frame = tk.Frame(queue_column, bg=self.lightest_grey, padx=5, pady=5, cursor="hand2")
@@ -823,7 +1009,7 @@ class AirportUI:
     def show_aircraft_in_display(self, airplane):
         # Clear all the widgets in the display area and rebuild
         for w in self.display_area_frame.winfo_children(): w.destroy()
-        tk.Frame(self.display_area_frame, text=display_airplane_caption, bg="black", fg="white", font=("Arial", 12, "bold", "underline"), ipadx=5, relief="flat", height = 39).grid(column=0, row=0, sticky="s")
+        tk.Frame(self.display_area_frame, bg="black", fg="white", font=("Arial", 12, "bold", "underline"), ipadx=5, relief="flat", height = 39).grid(column=0, row=0, sticky="s")
 
 
 
