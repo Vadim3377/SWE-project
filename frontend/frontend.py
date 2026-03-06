@@ -798,6 +798,8 @@ class AirportUI:
             if pid not in current_ids:
                 was_selected = self.selected_widget == widget_dict[pid]
                 widget_dict[pid]["frame"].destroy()
+                if self.selected_widget == widget_dict[pid]:
+                    self.selected_widget = None
                 del widget_dict[pid]
                 if was_selected:
                     self.selected_widget = None
@@ -1045,12 +1047,6 @@ class AirportUI:
 
     # --- Info Displays ---
 
-<<<<<<< Updated upstream
-    def show_aircraft_in_display(self, airplane):
-        # Clear all the widgets in the display area and rebuild
-        for w in self.display_area_frame.winfo_children(): w.destroy()
-        tk.Frame(self.display_area_frame, bg="black", fg="white", font=("Arial", 12, "bold", "underline"), ipadx=5, relief="flat", height = 39).grid(column=0, row=0, sticky="s")
-=======
     def show_aircraft_in_display(self, plane):
         # Clear previous content
         for w in self.display_area_frame.winfo_children():
@@ -1058,7 +1054,6 @@ class AirportUI:
 
         # Use pack
         self.update_display_plane(plane)
->>>>>>> Stashed changes
 
 
     def show_runway_in_display(self, runway):
