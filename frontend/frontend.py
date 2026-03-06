@@ -796,21 +796,60 @@ class AirportUI:
         # Destroy widgets for planes that are no longer in the queue.
         for pid in list(widget_dict):
             if pid not in current_ids:
+                was_selected = self.selected_widget == widget_dict[pid]
                 widget_dict[pid]["frame"].destroy()
-                if self.selected_widget == widget_dict[pid]:
-                    self.selected_widget = None
                 del widget_dict[pid]
+                if was_selected:
+                    self.selected_widget = None
+                    # Auto-select the first remaining plane in this queue
+                    if widget_dict:
+                        next_pid = next(iter(widget_dict))
+                        next_plane = next((p for p in queue if p.callsign == next_pid), None)
+                        if next_plane:
+                            self.select_widget(widget_dict[next_pid])
+                            self.show_airplane_info(next_plane)
+                            self.show_aircraft_in_display(next_plane)
 
-    def update_display_plane(self, airplane):
-        plane_icon = PhotoImage(file="assets/plane_icon.png")
-        plane_icon_label = tk.Label(self.display_area_frame, plane_icon)
-        plane_icon_label.pack()
-        #plane_icon = plane_icon.rotate(45, Image.BICUBIC, expand = True)
-        #plane_icon.show
-        pass
+    def update_display_plane(self, plane):
+        plane_icon = Image.open("frontend/assets/plane_icon.png")
+        plane_icon = plane_icon.convert("RGBA")
+        plane_icon = plane_icon.resize(
+            (int(self.col_w_display * 0.85), int(self.col_w_display * 0.85)),
+            resample=Image.BICUBIC
+        )
+        plane_photo = ImageTk.PhotoImage(plane_icon)
+
+        plane_icon_label = tk.Label(
+            self.display_area_frame,
+            image=plane_photo,
+            bg=self.display_area_frame.cget("bg"),
+            anchor="center"
+        )
+        # Keep a reference on the frame itself to prevent garbage collection
+        self.display_area_frame.plane_photo = plane_photo
+        plane_icon_label.pack(expand=False)  # expand=True centres it in the available space
+
 
     def update_display_runway(self, runway):
-        pass
+        runway_icon = Image.open("frontend/assets/runway_icon.png")
+        runway_icon = runway_icon.convert("RGBA")
+        rotation_angle = -runway.bearing
+        runway_icon = runway_icon.rotate(rotation_angle, expand=False)
+        runway_icon = runway_icon.resize(
+            (int(self.col_w_display * 1.4), int(self.col_w_display * 1.4)),
+            resample=Image.BICUBIC
+        )
+        runway_photo = ImageTk.PhotoImage(runway_icon)
+
+        runway_icon_label = tk.Label(
+            self.display_area_frame,
+            image=runway_photo,
+            bg=self.display_area_frame.cget("bg"),
+            anchor="center"
+        )
+        # Keep a reference on the frame itself to prevent garbage collection
+        self.display_area_frame.runway_photo = runway_photo
+        runway_icon_label.pack(expand=False)  # expand=True centres it in the available space
 
 
 
@@ -845,7 +884,7 @@ class AirportUI:
         def on_click(e):
             self.select_widget(widget_ref)
             self.show_airplane_info(plane)
-            self.update_display_plane(plane)
+            self.show_aircraft_in_display(plane)
 
         widget_frame.bind("<Button-1>", on_click)
         for lbl in (tl, tr, ml, mr, bl, br): lbl.bind("<Button-1>", on_click)
@@ -916,7 +955,7 @@ class AirportUI:
             if rw.status == "AVAILABLE":
                 self.select_widget(widget_ref)
             self.show_runway_info(rw)
-            self.update_display_runway(rw)
+            self.show_runway_in_display(rw)
 
         widget_frame.bind("<Button-1>", on_click)
         for lbl in (tl, bl, br): lbl.bind("<Button-1>", on_click)
@@ -1006,12 +1045,29 @@ class AirportUI:
 
     # --- Info Displays ---
 
+<<<<<<< Updated upstream
     def show_aircraft_in_display(self, airplane):
         # Clear all the widgets in the display area and rebuild
         for w in self.display_area_frame.winfo_children(): w.destroy()
         tk.Frame(self.display_area_frame, bg="black", fg="white", font=("Arial", 12, "bold", "underline"), ipadx=5, relief="flat", height = 39).grid(column=0, row=0, sticky="s")
+=======
+    def show_aircraft_in_display(self, plane):
+        # Clear previous content
+        for w in self.display_area_frame.winfo_children():
+            w.destroy()
+
+        # Use pack
+        self.update_display_plane(plane)
+>>>>>>> Stashed changes
 
 
+    def show_runway_in_display(self, runway):
+        # Clear previous content
+        for w in self.display_area_frame.winfo_children():
+            w.destroy()
+
+        # Use pack
+        self.update_display_runway(runway)
 
     def show_airplane_info(self, airplane):
         # Clear whatever was shown before and rebuild with this aircraft's data.
@@ -1053,7 +1109,10 @@ class AirportUI:
     def select_widget(self, widget):
         # Deselect the previously highlighted widget before applying the new selection.
         if self.selected_widget:
-            self.update_widget_colors(self.selected_widget["frame"], self.lightest_grey)
+            try:
+                self.update_widget_colors(self.selected_widget["frame"], self.lightest_grey)
+            except tk.TclError:
+                pass
         self.selected_widget = widget
         self.update_widget_colors(widget["frame"], "#c8c6c6")  # Slightly darker than the default background.
 
