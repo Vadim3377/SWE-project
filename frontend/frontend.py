@@ -269,14 +269,14 @@ class AirportUI:
         self.settings_win = tk.Toplevel(self.root)
         self.settings_win.title("Simulation Settings")
         # Scaled dimensions to keep everything proportional.
-        self.settings_win.geometry(f"{int(500 * self.scale)}x{int(550 * self.scale)}")
+        self.settings_win.geometry(f"{int(500 * self.scale)}x{int(600 * self.scale)}")
         self.settings_win.configure(bg=self.dark_grey)
         self.settings_win.grab_set()
         self.settings_win.resizable(False, False)
         self.settings_win.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
         main_card = tk.Frame(self.settings_win, bg=self.lightest_grey, relief="flat")
-        main_card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.9, relheight=0.9)
+        main_card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.95, relheight=0.95)
 
         header_frame = tk.Frame(main_card, bg=self.lightest_grey)
         header_frame.pack(fill="x", pady=(15, 10))
@@ -310,12 +310,12 @@ class AirportUI:
                 bg=bg_color, 
                 fg=self.text_color,
                 font=("Arial", int(11 * self.scale), "bold")
-            ).pack(side="left", padx=20, pady=10)
+            ).pack(side="left", padx=20, pady=10 * self.scale)
             
             # Entry boxes styled to look clean against the grey rows.
             entry = ttk.Entry(row, font=("Arial", int(11 * self.scale)), width=8, justify="center")
             entry.insert(0, str(default_val))
-            entry.pack(side="right", padx=20, pady=10)
+            entry.pack(side="right", padx=20, pady=10 * self.scale)
             
             entries[label_text] = entry
 
