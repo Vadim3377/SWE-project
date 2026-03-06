@@ -1,5 +1,6 @@
 import tkinter as tk
 import time
+import itertools
 from PIL import Image, ImageTk
 from tkinter import ttk, PhotoImage
 from backend.SimulationParameters import SimulationParams
@@ -140,11 +141,11 @@ class AirportUI:
     # --- UI Builders ---
 
     def create_section(self, parent, x, y, w, h, name, title=True, scrollable=False):
-        # Outer frame provides the medium-grey border effect.
+        # Outer frame provides the medium-grey border effect
         outer_frame = tk.Frame(parent, bg=self.medium_grey, width=w, height=h)
         outer_frame.place(x=x, y=y)
 
-        # Inner frame sits 4 px inside the outer, giving the illusion of a border.
+        # Inner frame sits 4 px inside the outer
         inset = 4
         inner_w = w - (inset * 2)
         inner_h = h - (inset * 2)
@@ -154,20 +155,20 @@ class AirportUI:
         title_h = int(40 * self.scale)
 
         if title:
-            # Title bar spans the full width at the top of the inner frame.
+            # Title bar spans the full width at the top of the inner frame
             tk.Label(inner_frame, text=name, bg=self.lightest_grey, fg=self.text_color, font=("Arial", int(14 * self.scale), "bold")).place(relx=0, rely=0, relwidth=1, anchor="nw")
 
         if not scrollable:
             return inner_frame
 
-        # Scrollable sections wrap their content in a Canvas so a scrollbar can attach.
+        # Scrollable sections wrap their content in a Canvas so a scrollbar can attach
         canvas = tk.Canvas(inner_frame, bg=self.light_grey, highlightthickness=0)
         scrollbar = ttk.Scrollbar(inner_frame, orient="vertical", command=canvas.yview)
         scrollable_inner_frame = tk.Frame(canvas, bg=self.light_grey)
         window = canvas.create_window((0, 0), window=scrollable_inner_frame, anchor="nw")
 
         def update_scroll_visibility(event=None):
-            # Hide the scrollbar when all content fits without scrolling.
+            # Hide the scrollbar when all content fits without scrolling
             inner_frame.update_idletasks()
             content_height = scrollable_inner_frame.winfo_reqheight()
             visible_height = canvas.winfo_height()
@@ -181,14 +182,14 @@ class AirportUI:
         scrollable_inner_frame.bind("<Configure>", update_scroll_visibility)
 
         def resize_scrollable_frame(event):
-            # Keep the inner frame filling the canvas width when the window resizes.
+            # Keep the inner frame filling the canvas width when the window resizes
             canvas.itemconfig(window, width=event.width)
             update_scroll_visibility()
 
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        # Bind/unbind mouse wheel only while the cursor is inside the scrollable area.
+        # Bind/unbind mouse wheel only while the cursor is inside the scrollable area
         def _bind_to_mousewheel(event):
             canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
@@ -202,7 +203,7 @@ class AirportUI:
 
         canvas.bind("<Configure>", resize_scrollable_frame)
         canvas.configure(yscrollcommand=scrollbar.set)
-        # Place the canvas below the scaled title bar.
+        # Place the canvas below the scaled title bar
         canvas.place(x=0, y=title_h, relwidth=1, height=inner_h - title_h)
 
         return scrollable_inner_frame
@@ -257,7 +258,7 @@ class AirportUI:
     # --- Popups (Using Toplevel) ---
 
     def open_simulation_settings(self, event=None):
-        # Bring an existing settings window to the front rather than opening a duplicate.
+        # Bring an existing settings window to the front if it exists, rather than opening a duplicate.
         if hasattr(self, 'settings_win') and self.settings_win.winfo_exists():
             self.settings_win.lift()
             return
@@ -267,40 +268,78 @@ class AirportUI:
 
         self.settings_win = tk.Toplevel(self.root)
         self.settings_win.title("Simulation Settings")
-        self.settings_win.geometry(f"{int(450 * self.scale)}x{int(450 * self.scale)}")
+        # Scaled dimensions to keep everything proportional.
+        self.settings_win.geometry(f"{int(500 * self.scale)}x{int(550 * self.scale)}")
         self.settings_win.configure(bg=self.dark_grey)
-        self.settings_win.grab_set()  # Block interaction with the main window.
+        self.settings_win.grab_set()
         self.settings_win.resizable(False, False)
         self.settings_win.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
-        container = tk.Frame(self.settings_win, bg=self.lightest_grey, padx=20, pady=20)
-        container.pack(fill="both", expand=True, padx=10, pady=10)
+        main_card = tk.Frame(self.settings_win, bg=self.lightest_grey, relief="flat")
+        main_card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.9, relheight=0.9)
 
-        tk.Label(container, text="Adjust Simulation Parameters", font=("Arial", int(16 * self.scale), "bold"), bg=self.lightest_grey).grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        header_frame = tk.Frame(main_card, bg=self.lightest_grey)
+        header_frame.pack(fill="x", pady=(15, 10))
+        
+        tk.Label(
+            header_frame, 
+            text="SIMULATION PARAMETERS", 
+            font=("Arial", int(14 * self.scale), "bold"), 
+            bg=self.lightest_grey, 
+            fg=self.text_color
+        ).pack()
+
+        # Container for the alternating rows.
+        rows_container = tk.Frame(main_card, bg=self.lightest_grey)
+        rows_container.pack(fill="both", expand=True, padx=2, pady=2)
 
         entries = {}
-        def add_setting(row, label_text, default_val):
-            # Helper that adds a label/entry pair and registers the entry in the dict.
-            tk.Label(container, text=label_text, bg=self.lightest_grey, font=("Arial", int(11 * self.scale), "bold")).grid(row=row, column=0, sticky="w", pady=5)
-            entry = ttk.Entry(container, font=("Arial", int(11 * self.scale)), width=10)
+        # Subtle shade difference for alternating rows.
+        color_a = self.lightest_grey
+        color_b = "#BDBDBD" # A slightly cooler, darker grey to provide contrast.
+
+        def add_setting(idx, label_text, default_val):
+            bg_color = color_a if idx % 2 == 0 else color_b
+            
+            row = tk.Frame(rows_container, bg=bg_color)
+            row.pack(fill="x")
+            
+            tk.Label(
+                row, 
+                text=label_text, 
+                bg=bg_color, 
+                fg=self.text_color,
+                font=("Arial", int(11 * self.scale), "bold")
+            ).pack(side="left", padx=20, pady=10)
+            
+            # Entry boxes styled to look clean against the grey rows.
+            entry = ttk.Entry(row, font=("Arial", int(11 * self.scale)), width=8, justify="center")
             entry.insert(0, str(default_val))
-            entry.grid(row=row, column=1, sticky="e", pady=5)
+            entry.pack(side="right", padx=20, pady=10)
+            
             entries[label_text] = entry
 
-        # Read current values from the engine so the dialog always reflects live state.
+        # Populate with current live engine state.
         p = getattr(self.engine, 'params', None)
         curr_runways = len(self.engine.airport.runways) if hasattr(self.engine, 'airport') else 3
         curr_speed = getattr(self.engine, 'speed_multiplier', 1.0)
 
-        add_setting(1, "Number Of Runways:", curr_runways)
-        add_setting(2, "Inbound flow (per hour):", getattr(p, 'inbound_rate_per_hour', 10) if p else 10)
-        add_setting(3, "Outbound flow (per hour):", getattr(p, 'outbound_rate_per_hour', 10) if p else 10)
-        add_setting(4, "Simulation speed multiplier:", curr_speed)
-        add_setting(5, "Max take off wait (mins):", getattr(p, 'max_takeoff_wait_min', 30.0) if p else 30.0)
-        add_setting(6, "Min fuel levels (mins):", getattr(p, 'fuel_min_min', 10.0) if p else 10.0)
-        # Emergency rate is stored internally as two separate probabilities; combine them for display.
-        emerg_rate = (getattr(p, 'p_mechanical_failure', 0.15) * 2) if p else 0.3
-        add_setting(7, "Rate of emergencies:", emerg_rate)
+        settings_list = [
+            ("Number Of Runways:", curr_runways),
+            ("Inbound flow (per hour):", getattr(p, 'inbound_rate_per_hour', 10) if p else 10),
+            ("Outbound flow (per hour):", getattr(p, 'outbound_rate_per_hour', 10) if p else 10),
+            ("Simulation speed multiplier:", curr_speed),
+            ("Max take off wait (mins):", getattr(p, 'max_takeoff_wait_min', 30.0) if p else 30.0),
+            ("Min fuel levels (mins):", getattr(p, 'fuel_min_min', 10.0) if p else 10.0),
+            ("Rate of emergencies:", (getattr(p, 'p_mechanical_failure', 0.15) * 2) if p else 0.3)
+        ]
+
+        for i, (label, val) in enumerate(settings_list):
+            add_setting(i, label, val)
+
+        # Error display area (hidden until needed).
+        error_label = tk.Label(main_card, text="", fg=self.emergency_text_color, bg=self.lightest_grey, font=("Arial", int(10 * self.scale), "bold"))
+        error_label.pack(pady=5)
 
         def apply():
             try:
@@ -314,29 +353,34 @@ class AirportUI:
                     float(entries["Rate of emergencies:"].get())
                 )
 
-
-                # Build the simulation UI only after settings are applied
                 if not getattr(self, "ui_built", False):
                     self.build_interface()
                     self.ui_built = True
 
                 self.update_ui()
-
                 self.settings_win.destroy()
-
                 self.root.deiconify()
                 self.root.lift()
                 self.root.focus_force()
-
                 self.toggle_pause(force_play=True)
             except ValueError:
-                # Show an inline error rather than crashing if the user typed non-numbers.
-                tk.Label(container, text="Invalid input: use numbers only", fg="red", bg=self.lightest_grey).grid(row=9, column=0, columnspan=2)
+                error_label.config(text="Invalid input: use numbers only")
             except Exception as e:
-                tk.Label(container, text=f"Apply Error: {str(e)[:40]}", fg="red", bg=self.lightest_grey).grid(row=9, column=0, columnspan=2)
+                error_label.config(text="Apply Error: Check console")
                 print(f"Apply error: {e}")
 
-        tk.Button(container, text="Apply Changes", bg=self.medium_grey, fg="white", font=("Arial", int(12 * self.scale), "bold"), command=apply).grid(row=8, column=0, columnspan=2, pady=20, ipadx=20)
+        # Matches theme of runway mode buttons
+        tk.Button(
+            main_card, 
+            text="APPLY CHANGES", 
+            bg=self.lightest_grey, 
+            fg=self.text_color, 
+            font=("Arial", int(11 * self.scale), "bold"), 
+            relief="solid", 
+            borderwidth=1,
+            padx=20,
+            command=apply
+        ).pack(pady=(0, 20))
 
     def open_statistics(self, event=None, show_saved=False, stop_flow=False):
         # Bring an existing stats window to the front rather than opening a duplicate.
@@ -614,7 +658,6 @@ class AirportUI:
         self.engine.current_time = 0
 
         # Replace stats and make sure the airport reference points to the same object.
-        # The original bug was that airport.stats kept pointing to the old instance.
         new_stats = Statistics()
         self.engine.stats = new_stats
         self.engine.airport.stats = new_stats
@@ -629,7 +672,7 @@ class AirportUI:
         self.pending_status_changes.clear()
         self.pending_runway_removals.clear()
 
-        # Zero the spawn accumulators; leftover fractions would cause near-instant spawns.
+        # Zero the spawn accumulators, since leftover fractions cause near-instant spawns.
         self.engine._inbound_acc = 0.0
         self.engine._outbound_acc = 0.0
 
@@ -707,25 +750,35 @@ class AirportUI:
 
         self.update_ui()
 
-        # Scale the tick interval by the speed multiplier so faster speeds tick more often.
-        try:
-            speed = float(getattr(self.engine, 'speed_multiplier', 1.0))
-            interval = int(1000 / speed) if speed > 0 else 1000
-        except:
-            interval = 1000
+        # Refresh the display area if something is selected
+        if self.selected_widget:
+            # We need to find the object associated with the selected widget
+            # Check both queues for the callsign
+            all_objs = self.engine.get_holding_queue() + self.engine.get_takeoff_queue()
+            for r in self.engine.get_runways():
+                if r.currentAircraft: all_objs.append(r.currentAircraft)
+            
+            # If the selected widget matches a plane's callsign, refresh it
+            for p in all_objs:
+                if p.callsign in self.holding_plane_widgets or p.callsign in self.takeoff_plane_widgets:
+                    if self.selected_widget.get("tl") and self.selected_widget["tl"].cget("text") == p.callsign:
+                        self.show_aircraft_in_display(p)
+                        break
+
+        # Scale the tick interval by the speed multiplier - faster speeds tick more often.
+        speed = float(getattr(self.engine, 'speed_multiplier', 1.0))
+        interval = int(1000 / speed) if speed > 0 else 1000
         self.sim_loop_id = self.root.after(interval, self.simulation_tick)
 
+
     def smooth_update(self):
-        # Skip smoothing entirely when paused.
         if self.engine.is_paused: return
         try:
             speed = float(getattr(self.engine, 'speed_multiplier', 1.0))
             tick_duration_ms = 1000 / speed if speed > 0 else 1000
             real_time_passed = (time.time() - self.last_tick_real_time) * 1000
-            # Fraction of the current tick that has elapsed in real time (clamped to 1).
             tick_fraction = min(1.0, real_time_passed / tick_duration_ms)
 
-            # Snapshot active aircraft so we can interpolate their progress bars.
             active_aircraft_data = {}
             for r in self.engine.get_runways():
                 if r.currentAircraft and r.occupancy == "OCCUPIED":
@@ -734,32 +787,35 @@ class AirportUI:
                         "duration": getattr(r, 'duration', 1)
                     }
 
-            # Smoothly advance the runway progress bars between ticks.
-            for r in self.engine.get_runways():
-                if r.id in self.runway_widgets:
-                    w = self.runway_widgets[r.id]
-                    if r.currentAircraft and r.currentAircraft.callsign in active_aircraft_data:
-                        data = active_aircraft_data[r.currentAircraft.callsign]
-                        elapsed = self.engine.get_time() - data["start"]
-                        smooth_val = ((elapsed + tick_fraction) / max(data["duration"], 1)) * 100
-                        w["progress"]["value"] = min(100, smooth_val)
-                    else:
-                        w["progress"]["value"] = 0
+                    # Update Runway Progress only if it changes
+                    if r.id in self.runway_widgets:
+                        w = self.runway_widgets[r.id]
+                        elapsed = self.engine.get_time() - r.startTime
+                        smooth_val = ((elapsed + tick_fraction) / max(getattr(r, 'duration', 1), 1)) * 100
+                        
+                        if w["progress"]["value"] != smooth_val:
+                            w["progress"]["value"] = min(100, smooth_val)
+                else:
+                    # Reset idle runway
+                    if r.id in self.runway_widgets and self.runway_widgets[r.id]["progress"]["value"] != 0:
+                        self.runway_widgets[r.id]["progress"]["value"] = 0
 
-            # Also smooth any plane widgets that are currently on a runway.
-            all_plane_widgets = {**self.holding_plane_widgets, **self.takeoff_plane_widgets}
-            for cs, widget in all_plane_widgets.items():
+            # Efficiently loop over planes without creating a new dictionary
+            for cs, widget in itertools.chain(self.holding_plane_widgets.items(), self.takeoff_plane_widgets.items()):
                 if cs in active_aircraft_data:
                     data = active_aircraft_data[cs]
                     elapsed = self.engine.get_time() - data["start"]
                     smooth_val = ((elapsed + tick_fraction) / max(data["duration"], 1)) * 100
-                    widget["progress"]["value"] = min(100, smooth_val)
+                    if widget["progress"]["value"] != smooth_val:
+                        widget["progress"]["value"] = min(100, smooth_val)
                 else:
-                    widget["progress"]["value"] = 0
-        except Exception as e:
-            pass  # Silently swallow errors here to avoid spamming the console.
+                    # Only write 0 if it isn't already 0 (saves Tkinter a redraw)
+                    if widget["progress"]["value"] != 0:
+                        widget["progress"]["value"] = 0
 
-        # Schedule the next frame at roughly 60 fps (16 ms).
+        except Exception as e:
+            pass 
+
         self.smooth_loop_id = self.root.after(16, self.smooth_update)
 
     def update_ui(self):
@@ -767,11 +823,15 @@ class AirportUI:
         # Prepend aircraft currently on a runway so they appear at the top of their queue.
         active_inbound = [r.currentAircraft for r in all_runways if r.currentAircraft and r.currentAircraft.type == "INBOUND"]
         full_holding_list = active_inbound + self.engine.get_holding_queue()
+
         active_outbound = [r.currentAircraft for r in all_runways if r.currentAircraft and r.currentAircraft.type == "OUTBOUND"]
         full_takeoff_list = active_outbound + self.engine.get_takeoff_queue()
 
-        self.update_plane_queue(full_holding_list, self.holding_queue_frame, self.holding_plane_widgets)
-        self.update_plane_queue(full_takeoff_list, self.takeoff_queue_frame, self.takeoff_plane_widgets)
+        # Cap the UI rendering to 50 planes per queue
+        MAX_UI_PLANES = 50 
+        
+        self.update_plane_queue(full_holding_list[:MAX_UI_PLANES], self.holding_queue_frame, self.holding_plane_widgets)
+        self.update_plane_queue(full_takeoff_list[:MAX_UI_PLANES], self.takeoff_queue_frame, self.takeoff_plane_widgets)
         self.update_runway_queue(all_runways, self.runway_queue_frame, self.runway_widgets)
         self.clock_label.config(text=f"{self.format_time(self.engine.get_time())}")
 
@@ -788,47 +848,56 @@ class AirportUI:
         for plane in queue:
             pid = plane.callsign
             current_ids.add(pid)
-            # Create a widget for planes we haven't seen before, then update it.
             if pid not in widget_dict:
                 widget_dict[pid] = self.create_plane_widget(frame, plane)
             self.update_plane_widget(widget_dict[pid], plane)
-        # Destroy widgets for planes that are no longer in the queue.
+
         for pid in list(widget_dict):
             if pid not in current_ids:
-                was_selected = self.selected_widget == widget_dict[pid]
-                widget_dict[pid]["frame"].destroy()
+                # Check if the plane being removed is the one we have selected
                 if self.selected_widget == widget_dict[pid]:
                     self.selected_widget = None
+                    # Clear the info panel and show idle icon
+                    for w in self.display_info_frame.winfo_children(): w.destroy()
+                    tk.Label(
+                        self.display_info_frame,
+                        text="Nothing Selected - Click on an Aircraft \n or Runway",
+                        bg=self.lightest_grey,
+                        font=("Arial", int(14 * self.scale), "bold")
+                    ).place(relx=0.5, rely=0.5, anchor="center")
+                    self.show_idle_display()
+
+                widget_dict[pid]["frame"].destroy()
                 del widget_dict[pid]
-                if was_selected:
-                    self.selected_widget = None
-                    # Auto-select the first remaining plane in this queue
-                    if widget_dict:
-                        next_pid = next(iter(widget_dict))
-                        next_plane = next((p for p in queue if p.callsign == next_pid), None)
-                        if next_plane:
-                            self.select_widget(widget_dict[next_pid])
-                            self.show_airplane_info(next_plane)
-                            self.show_aircraft_in_display(next_plane)
 
-    def update_display_plane(self, plane):
-        plane_icon = Image.open("frontend/assets/plane_icon.png")
-        plane_icon = plane_icon.convert("RGBA")
-        plane_icon = plane_icon.resize(
-            (int(self.col_w_display * 0.85), int(self.col_w_display * 0.85)),
-            resample=Image.BICUBIC
-        )
-        plane_photo = ImageTk.PhotoImage(plane_icon)
+    def update_display_plane(self, plane, bearing=None):
+        try:
+            plane_icon = Image.open("frontend/assets/plane_icon.png").convert("RGBA")
+            
+            # If on a runway, rotate to match the runway bearing (assuming icon faces 0/Right)
+            if bearing is not None:
+                rotation_angle = -bearing * 10 
+                plane_icon = plane_icon.rotate(rotation_angle, expand=True)
 
-        plane_icon_label = tk.Label(
-            self.display_area_frame,
-            image=plane_photo,
-            bg=self.display_area_frame.cget("bg"),
-            anchor="center"
-        )
-        # Keep a reference on the frame itself to prevent garbage collection
-        self.display_area_frame.plane_photo = plane_photo
-        plane_icon_label.pack(expand=False)  # expand=True centres it in the available space
+            plane_icon = plane_icon.resize(
+                (int(self.col_w_display * 0.7), int(self.col_w_display * 0.7)),
+                resample=Image.BICUBIC
+            )
+            plane_photo = ImageTk.PhotoImage(plane_icon)
+
+            plane_icon_label = tk.Label(
+                self.display_area_frame,
+                image=plane_photo,
+                bg=self.light_grey,
+            )
+            plane_icon_label.image = plane_photo
+            # PLACEHOLDER - Placing plane image on top of runway image. Needs to be rewritten.
+            if bearing is not None:
+                plane_icon_label.place(relx=0.5, rely=0.5, anchor="center")
+            else:
+                plane_icon_label.pack(expand=False)
+        except Exception as e:
+            print(f"Plane icon error: {e}")
 
     def update_display_runway(self, runway):
         runway_icon = Image.open("frontend/assets/runway_icon.png")
@@ -890,6 +959,11 @@ class AirportUI:
         widget_ref.update({ "frame": widget_frame, "tl": tl, "tr": tr, "ml": ml, "br": br, "progress": progress })
         return widget_ref
 
+
+    def update_label_if_changed(self, label, new_text):
+        if label.cget("text") != str(new_text):
+            label.config(text=new_text)
+
     def update_plane_widget(self, widget, plane):
         # Determine the highest-priority emergency to display, if any.
         emerg = ""
@@ -897,13 +971,16 @@ class AirportUI:
             if plane.emergency.mechanical_failure: emerg = "Mechanical Failure"
             elif plane.emergency.passenger_illness: emerg = "Passenger Illness"
             elif plane.emergency.fuel_emergency: emerg = "Fuel Emergency"
-        widget["tl"].config(text=plane.callsign)
-        widget["tr"].config(text=emerg)
-        widget["ml"].config(text=getattr(plane, 'operator', 'Unknown'))
-        widget["br"].config(text="Scheduled " + self.format_time(getattr(plane, 'scheduledTime', 0)))
-        # Inbound uses orange, outbound uses green, matching the progress bar styles.
+
+        self.update_label_if_changed(widget["tl"], plane.callsign)
+        self.update_label_if_changed(widget["tr"], emerg)
+        self.update_label_if_changed(widget["ml"], getattr(plane, 'operator', 'Unknown'))
+        self.update_label_if_changed(widget["br"], "Scheduled " + self.format_time(getattr(plane, 'scheduledTime', 0)))
+
+        # Inbound uses orange, outbound uses green, matching the progress bar styles. Configure style only if it differs.
         style = "Orange.Horizontal.TProgressbar" if plane.type == "INBOUND" else "Green.Horizontal.TProgressbar"
-        widget["progress"].config(style=style)
+        if widget["progress"].cget("style") != style:
+            widget["progress"].config(style=style)
 
     def update_runway_queue(self, queue, frame, widget_dict):
         current_ids = set()
@@ -1048,16 +1125,41 @@ class AirportUI:
         for w in self.display_area_frame.winfo_children():
             w.destroy()
 
-        # Use pack
-        self.update_display_plane(plane)
+        # Find if this plane is currently on a runway
+        assigned_runway = next((r for r in self.engine.get_runways() if r.currentAircraft == plane), None)
+
+        if assigned_runway:
+            # Layering: Show runway first, then plane on top
+            self.update_display_runway(assigned_runway)
+            # We pass the runway bearing to the plane display for alignment
+            self.update_display_plane(plane, bearing=assigned_runway.bearing)
+        else:
+            # Normal view (facing right/default)
+            self.update_display_plane(plane)
 
     def show_runway_in_display(self, runway):
         # Clear previous content
         for w in self.display_area_frame.winfo_children():
             w.destroy()
-
-        # Use pack
+        
         self.update_display_runway(runway)
+        # If the runway has a plane, layer it on top
+        if runway.currentAircraft:
+            self.update_display_plane(runway.currentAircraft, bearing=runway.bearing)
+
+    def show_idle_display(self):
+        """Shows the idle png when nothing is selected."""
+        for w in self.display_area_frame.winfo_children():
+            w.destroy()
+        try:
+            idle_img = Image.open("frontend/assets/idle_icon.png").convert("RGBA")
+            idle_img = idle_img.resize((int(self.col_w_display * 0.8), int(self.col_w_display * 0.8)), Image.BICUBIC)
+            idle_photo = ImageTk.PhotoImage(idle_img)
+            lbl = tk.Label(self.display_area_frame, image=idle_photo, bg=self.light_grey)
+            lbl.image = idle_photo 
+            lbl.pack(expand=True)
+        except Exception as e:
+            print(f"Could not load idle_icon: {e}")
 
     def show_airplane_info(self, airplane):
         # Clear whatever was shown before and rebuild with this aircraft's data.
