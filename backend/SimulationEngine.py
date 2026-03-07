@@ -35,6 +35,93 @@ class SimulationEngine:
         self._next_in_id: int = 1
         self._next_out_id: int = 1
 
+        self._prime_scheduler(lookahead_window=15)
+
+    def _prime_scheduler(self, lookahead_window: int) -> None:
+        """
+        Generates traffic for the initial gap (Time 0 to Time 15)
+        so the simulation starts with planes.
+        """
+        # Iterate 1 minute at a time to fill the backlog
+        dt = 1
+        created_aircraft = []
+
+        for t in range(lookahead_window):
+            # Handles the Inbound Backlog
+            self._inbound_acc += self.expected_per_tick(self.params.inbound_rate_per_hour, dt)
+            while self._inbound_acc >= 1.0:
+                self._inbound_acc -= 1.0
+                # Schedule for time 't' (e.g., 0, 1, 2... 14)
+                a = self.make_inbound_aircraft(now=t)
+                created_aircraft.append(a)
+                
+                # Jitter might make spawn_time negative (e.g. -2), 
+                # which ensures they appear immediately at tick 0.
+                spawn_time = self.stats.sample_inbound_spawn_time(t)
+                self._pending_inbound.append((spawn_time, a))
+
+            # Handles the Outbound Backlog
+            self._outbound_acc += self.expected_per_tick(self.params.outbound_rate_per_hour, dt)
+            while self._outbound_acc >= 1.0:
+                self._outbound_acc -= 1.0
+                a = self.make_outbound_aircraft(now=t)
+                created_aircraft.append(a)
+                
+                spawn_time = self.stats.sample_outbound_spawn_time(t)
+                self._pending_outbound.append((spawn_time, a))
+
+        # Apply emergency rolls to these pre-generated planes
+        self._apply_emergencies_this_tick(created_aircraft)
+
+    def regenerate_schedule(self, lookahead_window: int = 15) -> None:
+        """
+        Clears pending aircraft and regenerates them using current parameters.
+        Includes a padding buffer to ensure the distribution tail is preserved.
+        """
+        self._pending_inbound.clear()
+        self._pending_outbound.clear()
+
+        # Reset accumulators so we start the new flow fresh
+        self._inbound_acc = 0.0
+        self._outbound_acc = 0.0
+
+        dt = int(self.params.tick_size_min)
+        
+        # Start from the next minute
+        start_time = self.current_time + 1
+        
+        # Bugfix: extend the generation end time.
+        # Since spawn times have an SD of ~5 mins, planes scheduled for 
+        # 'lookahead + 15' might arrive within the 'lookahead' window.
+        # Generating 20 extra minutes ensures the tail of the distribution is present.
+        padding = 20
+        end_time = self.current_time + lookahead_window + padding
+
+        created_aircraft = []
+
+        for t in range(start_time, end_time + 1):
+            # Inbound planes
+            self._inbound_acc += self.expected_per_tick(self.params.inbound_rate_per_hour, dt)
+            while self._inbound_acc >= 1.0:
+                self._inbound_acc -= 1.0
+                a = self.make_inbound_aircraft(now=t)
+                created_aircraft.append(a)
+                # Sample the spawn time using the updated stats
+                spawn_time = self.stats.sample_inbound_spawn_time(t)
+                self._pending_inbound.append((spawn_time, a))
+
+            # Outbound planes
+            self._outbound_acc += self.expected_per_tick(self.params.outbound_rate_per_hour, dt)
+            while self._outbound_acc >= 1.0:
+                self._outbound_acc -= 1.0
+                a = self.make_outbound_aircraft(now=t)
+                created_aircraft.append(a)
+                spawn_time = self.stats.sample_outbound_spawn_time(t)
+                self._pending_outbound.append((spawn_time, a))
+        
+        # Apply emergencies to the new batch
+        self._apply_emergencies_this_tick(created_aircraft)
+
     def tick(self) -> None:
         if self.is_paused:
             return
@@ -93,77 +180,90 @@ class SimulationEngine:
     def expected_per_tick(rate_per_hour: float, dt_min: int) -> float:
         return rate_per_hour * (dt_min / 60.0)
 
-    def _create_emergency(self) -> EmergencyType:
+    def _create_emergency(self) -> Optional[EmergencyType]:
         r = self._rng.random()
         p_mech = self.params.p_mechanical_failure
         p_ill = self.params.p_passenger_illness
 
+        # If r < 0.05, mechanical. If 0.05 < r < 0.10, illness. 
+        # If r > 0.10, no emergency.
         if r < p_mech:
             return EmergencyType(mechanical_failure=True)
         elif r < p_mech + p_ill:
             return EmergencyType(passenger_illness=True)
-        else:
-            return EmergencyType(fuel_emergency=True)
+        
+        # Fuel emergencies are handled dynamically in update_constraints, 
+        # so we should have returned None here if the roll didn't hit a spawn emergency.
+        return None
 
     def _apply_emergencies_this_tick(self, aircraft_created: List[Any]) -> None:
-        n = int(self.params.emergencies_per_tick)
-        if n <= 0 or not aircraft_created:
+        if not aircraft_created:
             return
 
-        k = min(n, len(aircraft_created))
-        for a in self._rng.sample(aircraft_created, k):
-            setattr(a, "emergency", self._create_emergency())
+        # Emergencies only apply to inbound aircraft (holding queue), not outbound.
+        for a in aircraft_created:
+            if getattr(a, "type", None) != "INBOUND":
+                continue
+
+            emerg = self._create_emergency()
+            if emerg is not None:
+                setattr(a, "emergency", emerg)
 
     def _generate_arrivals(self, now: int, dt: int) -> None:
+        # We look ahead by 15 minutes to allow for "early" jittered arrivals
+        lookahead_window = now + 15
         self._inbound_acc += self.expected_per_tick(self.params.inbound_rate_per_hour, dt)
         created: List[Any] = []
 
         while self._inbound_acc >= 1.0:
             self._inbound_acc -= 1.0
-
-            a = self.make_inbound_aircraft(now)
+            
+            # The 'target_time' is the uniform schedule time
+            target_time = lookahead_window 
+            a = self.make_inbound_aircraft(target_time)
             created.append(a)
 
-            spawn_time = self.stats.sample_inbound_spawn_time(now)
+            # Jitter the actual spawn time around the target time
+            spawn_time = self.stats.sample_inbound_spawn_time(target_time)
             self._pending_inbound.append((spawn_time, a))
 
         self._apply_emergencies_this_tick(created)
 
     def _generate_departures(self, now: int, dt: int) -> None:
+        lookahead_window = now + 15
         self._outbound_acc += self.expected_per_tick(self.params.outbound_rate_per_hour, dt)
         created: List[Any] = []
 
         while self._outbound_acc >= 1.0:
             self._outbound_acc -= 1.0
-
-            a = self.make_outbound_aircraft(now)
+            
+            target_time = lookahead_window
+            a = self.make_outbound_aircraft(target_time)
             created.append(a)
 
-            spawn_time = self.stats.sample_outbound_spawn_time(now)
+            spawn_time = self.stats.sample_outbound_spawn_time(target_time)
             self._pending_outbound.append((spawn_time, a))
 
         self._apply_emergencies_this_tick(created)
 
     def _flush_pending(self, now: int) -> None:
-        # Inbound
-        if self._pending_inbound:
-            due, future = [], []
-            for t, a in self._pending_inbound:
-                (due if t <= now else future).append((t, a))
-            self._pending_inbound = future
+        # Sort both lists by the spawn_time (the first element of the tuple)
+        self._pending_inbound.sort(key=lambda x: x[0])
+        self._pending_outbound.sort(key=lambda x: x[0])
 
-            for t, a in due:
-                self.airport.handleInbound(a, t)
+        # Inbound: Flush all aircraft whose spawn_time has passed or is now
+        due_inbound = [a for t, a in self._pending_inbound if t <= now]
+        self._pending_inbound = [(t, a) for t, a in self._pending_inbound if t > now]
+        for a in due_inbound:
+            # We use the original sampled spawn_time for the handleInbound call
+            # to ensure the airport knows exactly when it "hit" the airspace.
+            self.airport.handleInbound(a, now)
 
-        # Outbound
-        if self._pending_outbound:
-            due, future = [], []
-            for t, a in self._pending_outbound:
-                (due if t <= now else future).append((t, a))
-            self._pending_outbound = future
-
-            for t, a in due:
-                self.airport.handleOutbound(a, t)
+        # Outbound: Flush all aircraft whose spawn_time has passed or is now
+        due_outbound = [a for t, a in self._pending_outbound if t <= now]
+        self._pending_outbound = [(t, a) for t, a in self._pending_outbound if t > now]
+        for a in due_outbound:
+            self.airport.handleOutbound(a, now)
 
     def update_constraints(self, now: int, dt: int) -> None:
         """
@@ -265,11 +365,9 @@ class SimulationEngine:
 
     def get_holding_queue(self):
         return self.airport.holding.to_list()
-        return self.airport.holding_display()
 
     def get_takeoff_queue(self):
         return self.airport.takeoff.to_list()
-        return self.airport.takeoff_display()
 
     def get_runways(self):
         return self.airport.runways
