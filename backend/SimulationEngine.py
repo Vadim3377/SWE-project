@@ -200,8 +200,11 @@ class SimulationEngine:
         if not aircraft_created:
             return
 
-        # Check every new aircraft against the probability curve
+        # Emergencies only apply to inbound aircraft (holding queue), not outbound.
         for a in aircraft_created:
+            if getattr(a, "type", None) != "INBOUND":
+                continue
+
             emerg = self._create_emergency()
             if emerg is not None:
                 setattr(a, "emergency", emerg)
