@@ -112,7 +112,6 @@ def build_engine(seed: int = 42) -> SimulationEngine:
         outbound_rate_per_hour=12.0,
         arrival_stddev_min=0,
         departure_stddev_min=0,
-        emergencies_per_tick=0,
         tick_size_min=1,
         fuel_emergency_min=15,
         fuel_min_min=10,
@@ -160,7 +159,7 @@ def main() -> None:
     engine = build_engine(seed=1)
 
     # Set to True to pre-load for testing.
-    INJECT_TEST_AIRCRAFT = True
+    INJECT_TEST_AIRCRAFT = False
     if INJECT_TEST_AIRCRAFT:
         inject_test_aircraft(engine)
 

@@ -331,7 +331,7 @@ class AirportUI:
             ("Simulation speed multiplier:", curr_speed),
             ("Max take off wait (mins):", getattr(p, 'max_takeoff_wait_min', 30.0) if p else 30.0),
             ("Min fuel levels (mins):", getattr(p, 'fuel_min_min', 10.0) if p else 10.0),
-            ("Rate of emergencies:", (getattr(p, 'p_mechanical_failure', 0.15) * 2) if p else 0.3)
+            ("Rate of emergencies:", (getattr(p, 'p_mechanical_failure', 0.0) + getattr(p, 'p_passenger_illness', 0.0)) * 100 if p else 0)
         ]
 
         for i, (label, val) in enumerate(settings_list):
@@ -391,7 +391,7 @@ class AirportUI:
         self.toggle_pause(force_pause=True)
         self.stats_win = tk.Toplevel(self.root)
         self.stats_win.title("Statistical Report" if not stop_flow else "Simulation Stopped - Statistics")
-        self.stats_win.geometry(f"{int(500 * self.scale)}x{int(450 * self.scale)}")
+        #self.stats_win.geometry(f"{int(500 * self.scale)}x{int(450 * self.scale)}")
         self.stats_win.configure(bg=self.dark_grey)
         self.stats_win.grab_set()
 
@@ -578,6 +578,23 @@ class AirportUI:
                 command=lambda: [self.stats_win.destroy(), self.toggle_pause(force_play=True)]
             ).grid(row=2, column=0, columnspan=2, pady=20, ipadx=20)
 
+        # --- Dynamic Sizing Logic ---
+        # Force Tkinter to calculate the size of all the widgets we just added
+        self.stats_win.update_idletasks()
+        
+        # Get the height required to fit the data
+        req_height = self.stats_win.winfo_reqheight()
+        # Keep the width consistent with your scale preference
+        fixed_width = int(500 * self.scale)
+        
+        # Calculate center position on screen
+        x_pos = int((self.root.winfo_screenwidth() - fixed_width) / 2)
+        y_pos = int((self.root.winfo_screenheight() - req_height) / 2)
+        
+        # Apply the calculated geometry
+        self.stats_win.geometry(f"{fixed_width}x{req_height}+{x_pos}+{y_pos}")
+        self.stats_win.resizable(False, False)
+
     # --- Data Application & Runway Degradation ---
 
     def apply_parameters(self, num_runways, in_flow, out_flow, speed_mult, max_wait, min_fuel, emerg_rate):
@@ -589,12 +606,10 @@ class AirportUI:
             max_takeoff_wait_min=int(max_wait),
             arrival_stddev_min=5,
             departure_stddev_min=5,
-            emergencies_per_tick=0,
             tick_size_min=1,
-            # The combined emergency rate is split evenly across the two failure types.
-            p_mechanical_failure=emerg_rate / 2,
-            p_passenger_illness=emerg_rate / 2,
-            p_fuel_emergency=0.0,
+            # The combined emergency rate (0-100) is converted to probability (0-1) and split evenly.
+            p_mechanical_failure=(emerg_rate / 100.0) / 2,
+            p_passenger_illness=(emerg_rate / 100.0) / 2,
             fuel_emergency_min=15,
             fuel_min_min=int(min_fuel)
         )
@@ -602,8 +617,11 @@ class AirportUI:
         # Speed multiplier is stored on the engine object, not inside SimulationParams.
         self.engine.speed_multiplier = speed_mult
         self.engine.params = params
-
+        
         self.engine.stats.configure_from_params(params)
+        
+        # Wipe the future schedule and rebuild it with the new params immediately
+        self.engine.regenerate_schedule(lookahead_window=15)
 
         current_runways = list(self.engine.airport.runways)
         current_count = len(current_runways)
@@ -682,6 +700,9 @@ class AirportUI:
         # Reset ID counters so callsigns start from the beginning again.
         self.engine._next_in_id = 1
         self.engine._next_out_id = 1
+
+        # Re-prime the scheduler so the first 15 minutes aren't empty.
+        self.engine._prime_scheduler(lookahead_window=15)
 
         # Return every runway to a clean idle state.
         for runway in self.engine.airport.runways:
@@ -928,6 +949,7 @@ class AirportUI:
         widget_frame.pack(fill="x", pady=4, padx=(4, 22))
         widget_frame.columnconfigure(0, weight=1)
         widget_frame.columnconfigure(1, weight=1)
+
         # Six labels laid out as a 3-row grid: top-left/right, mid-left/right, bottom-left/right.
         tl = tk.Label(widget_frame, text="", bg=self.lightest_grey, font=("Arial", int(13 * self.scale), "bold"), anchor="w")
         tr = tk.Label(widget_frame, text="", bg=self.lightest_grey, fg=self.emergency_text_color, font=("Arial", int(11 * self.scale), "bold"), anchor="e")
@@ -935,20 +957,21 @@ class AirportUI:
         mr = tk.Label(widget_frame, text="", bg=self.lightest_grey, font=("Arial", max(4, int(5 * self.scale))), anchor="e")
         bl = tk.Label(widget_frame, text="[Progress]", bg=self.lightest_grey, font=("Arial", int(11 * self.scale), "bold"), anchor="w")
         br = tk.Label(widget_frame, text="", bg=self.lightest_grey, font=("Arial", int(11 * self.scale)), anchor="e")
+
         tl.grid(row=0, column=0, sticky="w")
         tr.grid(row=0, column=1, sticky="e")
         ml.grid(row=1, column=0, sticky="w")
         mr.grid(row=1, column=1, sticky="e")
         bl.grid(row=2, column=0, sticky="w")
         br.grid(row=2, column=1, sticky="e")
-        # Progress bar sits in its own container frame so height can be fixed.
+
+        # Progress bar
         pc = tk.Frame(widget_frame, height=int(13 * self.scale), bg=self.lightest_grey)
         pc.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 0))
         pc.pack_propagate(False)
         progress = ttk.Progressbar(pc, orient="horizontal", mode="determinate")
         progress.pack(fill="both", expand=True)
 
-        # widget_ref is populated below so the closure captures the final dict.
         widget_ref = {}
 
         def on_click(e):
@@ -959,7 +982,7 @@ class AirportUI:
         widget_frame.bind("<Button-1>", on_click)
         for lbl in (tl, tr, ml, mr, bl, br): lbl.bind("<Button-1>", on_click)
 
-        widget_ref.update({ "frame": widget_frame, "tl": tl, "tr": tr, "ml": ml, "br": br, "progress": progress })
+        widget_ref.update({ "frame": widget_frame, "tl": tl, "tr": tr, "ml": ml, "bl": bl, "br": br, "progress": progress })
         return widget_ref
 
 
@@ -980,7 +1003,59 @@ class AirportUI:
         self.update_label_if_changed(widget["ml"], getattr(plane, 'operator', 'Unknown'))
         self.update_label_if_changed(widget["br"], "Scheduled " + self.format_time(getattr(plane, 'scheduledTime', 0)))
 
-        # Inbound uses orange, outbound uses green, matching the progress bar styles. Configure style only if it differs.
+        # Some status + colour logic
+        # Check if this plane is currently on any runway
+        active_runway = None
+        for r in self.engine.get_runways():
+            if r.currentAircraft == plane:
+                active_runway = r
+                break
+
+        status_text = ""
+        status_color = self.text_color  # Default black
+
+        if active_runway:
+            # It is currently Landing or Taking Off
+            action = "Landing" if plane.type == "INBOUND" else "Taking Off"
+            status_text = f"{action} - Runway {active_runway.id}"
+        else:
+            # It is waiting in the queue
+            current_time = self.engine.get_time()
+            
+            if plane.type == "INBOUND":
+                # INBOUND: Show Fuel Remaining
+                fuel = getattr(plane, 'fuelRemaining', 0)
+                status_text = f"Fuel remaining: {fuel}min"
+                
+                # Turn RED if within 5 mins of the Minimum Fuel Diversion limit
+                # e.g. If limit is 10m, turn red at 15m.
+                min_fuel_limit = getattr(self.engine.params, 'fuel_min_min', 10)
+                if fuel <= (min_fuel_limit + 5):
+                    status_color = self.emergency_text_color
+
+            else:
+                # OUTBOUND: Show Wait Time
+                wait_time = int(current_time - getattr(plane, 'scheduledTime', 0))
+                # If joinedTakeoffQueueAt exists, use that for accuracy, otherwise fallback to schedule
+                if hasattr(plane, 'joinedTakeoffQueueAt'):
+                    wait_time = int(current_time - plane.joinedTakeoffQueueAt)
+                
+                status_text = f"Waiting for {wait_time}min"
+
+                # Turn RED if within 5 mins of the Max Wait Cancellation limit
+                # e.g. If limit is 30m, turn red at 25m.
+                max_wait_limit = getattr(self.engine.params, 'max_takeoff_wait_min', 30)
+                if wait_time >= (max_wait_limit - 5):
+                    status_color = self.emergency_text_color
+
+        # Apply Text and Color to the Bottom-Left (bl) Label
+        if widget["bl"].cget("text") != status_text:
+            widget["bl"].config(text=status_text)
+        
+        if widget["bl"].cget("fg") != status_color:
+            widget["bl"].config(fg=status_color)
+
+        # Inbound uses orange, outbound uses green, matching the progress bar styles.
         style = "Orange.Horizontal.TProgressbar" if plane.type == "INBOUND" else "Green.Horizontal.TProgressbar"
         if widget["progress"].cget("style") != style:
             widget["progress"].config(style=style)

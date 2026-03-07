@@ -19,13 +19,9 @@ class SimulationParams:
     fuel_initial_min_min: int = 20
     fuel_initial_max_min: int = 60
 
-    # Emergencies per tick (count)
-    emergencies_per_tick: int = 0
-
-    # distribution of emergency types (weights)
-    p_mechanical_failure: float = 0.4
-    p_passenger_illness: float = 0.4
-    p_fuel_emergency: float = 0.2
+    # Distribution of emergency types (weights)
+    p_mechanical_failure: float = 0.05
+    p_passenger_illness: float = 0.05
 
     # Engine timing
     tick_size_min: int = 1  # 1-minute discrete tick
@@ -44,7 +40,7 @@ class SimulationParams:
         if self.tick_size_min <= 0:
             raise ValueError("tick_size_min must be > 0.")
 
-        # allow 0 to disable noise
+        # Allow 0 to disable noise
         if self.arrival_stddev_min < 0 or self.departure_stddev_min < 0:
             raise ValueError("stddev minutes must be >= 0.")
 
@@ -58,9 +54,11 @@ class SimulationParams:
         if self.fuel_min_min >= self.fuel_initial_min_min:
             raise ValueError("fuel_min_min must be < fuel_initial_min_min.")
 
-        if self.emergencies_per_tick < 0:
-            raise ValueError("emergencies_per_tick must be >= 0.")
-
-        #s = self.p_mechanical_failure + self.p_passenger_illness + self.p_fuel_emergency
-        #if abs(s - 1.0) > 1e-9:
-            #raise ValueError("Emergency probabilities must sum to 1.0.")
+        # Ensure the combined probability of all emergency types doesn't exceed 100%
+        total_p = self.p_mechanical_failure + self.p_passenger_illness
+        
+        if total_p > 1.0 + 1e-9:
+            raise ValueError(f"Total emergency probability ({total_p:.2f}) cannot exceed 1.0.")
+            
+        if any(p < 0 for p in [self.p_mechanical_failure, self.p_passenger_illness]):
+            raise ValueError("Emergency probabilities cannot be negative.")
