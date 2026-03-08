@@ -343,6 +343,37 @@ class AirportUI:
 
         def apply():
             try:
+                values = {
+                    "Number Of Runways:": int(entries["Number Of Runways:"].get()),
+                    "Inbound flow (per hour):": float(entries["Inbound flow (per hour):"].get()),
+                    "Outbound flow (per hour):": float(entries["Outbound flow (per hour):"].get()),
+                    "Simulation speed multiplier:": float(entries["Simulation speed multiplier:"].get()),
+                    "Max take off wait (mins):": float(entries["Max take off wait (mins):"].get()),
+                    "Min fuel levels (mins):": float(entries["Min fuel levels (mins):"].get()),
+                    "Rate of emergencies:": float(entries["Rate of emergencies:"].get()),
+                }
+
+                # Validation rules for each input. True means 0 must not be included
+                rules = {
+                    "Number Of Runways:": (1,  10,  False),
+                    "Inbound flow (per hour):": (1,  45,  False),
+                    "Outbound flow (per hour):": (1,  45,  False),
+                    "Simulation speed multiplier:": (0,  10,  True),
+                    "Max take off wait (mins):": (10, 59,  False),
+                    "Min fuel levels (mins):": (10, 30,  False),
+                    "Rate of emergencies:": (0,  50,  True),
+                }
+                
+                # Checks inputs are in the correct ranges. outputs error message if not
+                for label, (range_min, range_max, exclude_0) in rules.items():
+                    v = values[label]
+                    if exclude_0 and not (v > range_min and v <= range_max):
+                        error_label.config(text=f"Invalid input: '{label}' must be between 0 and {range_max} (not 0)")
+                        return
+                    elif not exclude_0 and not (range_min <= v <= range_max):
+                        error_label.config(text=f"Invalid input: '{label}' must be between {range_min} and {range_max}")
+                        return
+
                 self.apply_parameters(
                     int(entries["Number Of Runways:"].get()),
                     float(entries["Inbound flow (per hour):"].get()),
