@@ -315,6 +315,7 @@ class AirportUI:
         # Create container for input rows
         rows_container = tk.Frame(main_card, bg=self.lightest_grey)
         rows_container.pack(fill="both", expand=True, padx=2, pady=2)
+
         entries = {}
         color_a = self.lightest_grey
         color_b = "#BDBDBD"
@@ -353,15 +354,45 @@ class AirportUI:
         # Apply settings logic
         def apply():
             try:
-                values = {k: float(v.get()) if k != "Number Of Runways:" else int(v.get()) for k, v in entries.items()}
-                # (Validation logic truncated for brevity - kept same as original)
+                values = {
+                    "Number Of Runways:": int(entries["Number Of Runways:"].get()),
+                    "Inbound flow (per hour):": float(entries["Inbound flow (per hour):"].get()),
+                    "Outbound flow (per hour):": float(entries["Outbound flow (per hour):"].get()),
+                    "Simulation speed multiplier:": float(entries["Simulation speed multiplier:"].get()),
+                    "Max take off wait (mins):": float(entries["Max take off wait (mins):"].get()),
+                    "Min fuel levels (mins):": float(entries["Min fuel levels (mins):"].get()),
+                    "Rate of emergencies:": float(entries["Rate of emergencies:"].get()),
+                }
+
+                # Restore Validation Rules (sorry)
+                rules = {
+                    "Number Of Runways:": (1, 10, False),
+                    "Inbound flow (per hour):": (1, 45, False),
+                    "Outbound flow (per hour):": (1, 45, False),
+                    "Simulation speed multiplier:": (0, 10, True),
+                    "Max take off wait (mins):": (10, 59, False),
+                    "Min fuel levels (mins):": (10, 30, False),
+                    "Rate of emergencies:": (0, 50, True),
+                }
+                
+                for label, (range_min, range_max, exclude_0) in rules.items():
+                    v = values[label]
+                    if exclude_0 and not (v > range_min and v <= range_max):
+                        error_label.config(text=f"Invalid input: '{label}' must be between 0 and {range_max} (not 0)")
+                        return
+                    elif not exclude_0 and not (range_min <= v <= range_max):
+                        error_label.config(text=f"Invalid input: '{label}' must be between {range_min} and {range_max}")
+                        return
+
                 self.apply_parameters(
-                    int(values["Number Of Runways:"]), values["Inbound flow (per hour):"], values["Outbound flow (per hour):"],
+                    values["Number Of Runways:"], values["Inbound flow (per hour):"], values["Outbound flow (per hour):"],
                     values["Simulation speed multiplier:"], values["Max take off wait (mins):"], values["Min fuel levels (mins):"], values["Rate of emergencies:"]
                 )
+
                 if not getattr(self, "ui_built", False):
                     self.build_interface()
                     self.ui_built = True
+
                 self.update_ui()
                 self.settings_win.destroy()
                 self.root.deiconify()
@@ -370,25 +401,21 @@ class AirportUI:
                 self.toggle_pause(force_play=True)
             except ValueError:
                 error_label.config(text="Invalid input: use numbers only")
-            except Exception as e:
-                error_label.config(text="Apply Error: Check console")
-                print(f"Apply error: {e}")
 
         tk.Button(main_card, text="APPLY CHANGES", bg=self.lightest_grey, fg=self.text_color, font=("Arial", int(11 * self.scale), "bold"), relief="solid", borderwidth=1, padx=20, command=apply).pack(pady=(0, 20))
 
     # Open the statistics modal window
     def open_statistics(self, event=None, show_saved=False, stop_flow=False):
-        # Bring existing window to front
         if hasattr(self, 'stats_win') and self.stats_win.winfo_exists():
             self.stats_win.lift()
             return
+
         self.toggle_pause(force_pause=True)
         self.stats_win = tk.Toplevel(self.root)
         self.stats_win.title("Statistical Report" if not stop_flow else "Simulation Stopped - Statistics")
         self.stats_win.configure(bg=self.dark_grey)
         self.stats_win.grab_set()
 
-        # Handle window close protocols
         if stop_flow:
             self.stats_win.protocol("WM_DELETE_WINDOW", self.stats_win.destroy)
         else:
@@ -396,12 +423,105 @@ class AirportUI:
 
         container = tk.Frame(self.stats_win, bg=self.lightest_grey, padx=20, pady=20)
         container.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # (Stats rendering logic omitted for brevity - kept same as original, it was fine)
-        # Just ensure geometry calculation happens at the end
+
+        header = "Live Statistical Report" if not stop_flow else "Simulation Stopped - Statistics"
+        tk.Label(container, text=header, font=("Arial", int(16 * self.scale), "bold"), bg=self.lightest_grey).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+
+        notebook = ttk.Notebook(container)
+        notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        container.grid_rowconfigure(1, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_columnconfigure(1, weight=1)
+
+        def _safe_num(v, default=0):
+            try:
+                if v is None or (isinstance(v, str) and v.strip() == ""): return default
+                fv = float(v)
+                return default if fv != fv else fv
+            except Exception: return default
+
+        def _render_report(parent, report_data, sim_time_min=None):
+            report_data = report_data or {}
+            frame = tk.Frame(parent, bg=self.lightest_grey)
+            frame.pack(fill="both", expand=True)
+            frame.grid_columnconfigure(0, weight=1)
+            frame.grid_columnconfigure(1, weight=1)
+
+            def add_stat(row, label, val):
+                if isinstance(val, (int, float)): val = _safe_num(val, 0)
+                display = f"{val:.2f}" if isinstance(val, float) else str(val)
+                tk.Label(frame, text=label, bg=self.lightest_grey, font=("Arial", int(11 * self.scale), "bold")).grid(row=row, column=0, sticky="w", pady=2)
+                tk.Label(frame, text=display, bg=self.lightest_grey, font=("Arial", int(11 * self.scale))).grid(row=row, column=1, sticky="e", pady=2)
+
+            add_stat(0, "Max holding queue size:", report_data.get("maxHoldingQueue", 0))
+            add_stat(1, "Avg holding queue size:", report_data.get("avgHoldingQueue", 0))
+            add_stat(2, "Max holding queue wait time (m):", report_data.get("maxArrivalDelay", 0))
+            add_stat(3, "Avg holding queue wait time (m):", report_data.get("avgHoldingTime", 0))
+            add_stat(4, "Max take off queue size:", report_data.get("maxTakeoffQueue", 0))
+            add_stat(5, "Avg take off queue size:", report_data.get("avgTakeoffQueue", 0))
+            add_stat(6, "Max take off queue wait time (m):", report_data.get("maxTakeoffWait", 0))
+            add_stat(7, "Avg take off queue wait time (m):", report_data.get("avgTakeoffWait", 0))
+            add_stat(8, "Total inbound diversions:", report_data.get("diversions", 0))
+            add_stat(9, "Total outbound cancellations:", report_data.get("cancellations", 0))
+
+            if sim_time_min is None: sim_time_min = report_data.get("sim_time_min", self.engine.get_time())
+            add_stat(10, "Total simulation time:", self.format_time(int(_safe_num(sim_time_min, 0))))
+
+            if isinstance(report_data, dict) and report_data.get("saved_at_utc"):
+                tk.Label(frame, text=f"Saved at (UTC): {report_data.get('saved_at_utc')}", bg=self.lightest_grey, font=("Arial", int(9 * self.scale))).grid(row=11, column=0, columnspan=2, sticky="w", pady=(10, 0))
+
+        # Handle Current Tab data
+        if stop_flow or show_saved:
+            try:
+                current_report = dict(read_last_report(DEFAULT_STATS_CSV_PATH) or {})
+            except Exception:
+                current_report = dict(self.last_saved_report) if self.last_saved_report is not None else {}
+            current_time = current_report.get("sim_time_min", self.last_saved_time if self.last_saved_time is not None else self.engine.get_time())
+        else:
+            current_report = self.engine.get_report()
+            current_time = self.engine.get_time()
+
+        current_tab = tk.Frame(notebook, bg=self.lightest_grey)
+        notebook.add(current_tab, text="Current")
+        _render_report(current_tab, current_report, current_time)
+
+        # Handle CSV reading for Previous Runs
+        def _read_all_reports_csv(path):
+            import csv
+            rows = []
+            try:
+                with open(path, "r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for r in reader: rows.append(dict(r))
+            except Exception: return []
+            return rows
+
+        previous_runs = _read_all_reports_csv(DEFAULT_STATS_CSV_PATH)
+        if previous_runs and previous_runs[0].get("saved_at_utc"):
+            previous_runs.sort(key=lambda r: (r.get("saved_at_utc") or ""), reverse=True)
+
+        for idx, run in enumerate(previous_runs[:12], start=1):
+            sim_t = int(_safe_num(run.get("sim_time_min", 0), 0))
+            tab = tk.Frame(notebook, bg=self.lightest_grey)
+            notebook.add(tab, text=f"Run {idx} ({self.format_time(sim_t)})")
+            _render_report(tab, run, sim_t)
+
+        # Buttons at bottom
+        if stop_flow:
+            tk.Button(container, text="Close", bg=self.medium_grey, fg="white", font=("Arial", int(12 * self.scale), "bold"), command=self.stats_win.destroy).grid(row=2, column=0, pady=20, ipadx=20, sticky="ew")
+            def _reset():
+                self.stats_win.destroy()
+                self.reset_simulation(open_settings=True)
+            tk.Button(container, text="Reset Simulation", bg=self.medium_grey, fg="white", font=("Arial", int(12 * self.scale), "bold"), command=_reset).grid(row=2, column=1, pady=20, ipadx=20, sticky="ew")
+        else:
+            tk.Button(container, text="Close", bg=self.medium_grey, fg="white", font=("Arial", int(12 * self.scale), "bold"), command=lambda: [self.stats_win.destroy(), self.toggle_pause(force_play=True)]).grid(row=2, column=0, columnspan=2, pady=20, ipadx=20)
+
         self.stats_win.update_idletasks()
-        self.stats_win.geometry(f"{int(500 * self.scale)}x{self.stats_win.winfo_reqheight()}+{int(self.root.winfo_screenwidth()/2 - 250)}+{int(self.root.winfo_screenheight()/2 - 200)}")
-        self.stats_win.resizable(False, False)
+        req_h = self.stats_win.winfo_reqheight()
+        fixed_w = int(500 * self.scale)
+        x = int((self.root.winfo_screenwidth() - fixed_w) / 2)
+        y = int((self.root.winfo_screenheight() - req_h) / 2)
+        self.stats_win.geometry(f"{fixed_w}x{req_h}+{x}+{y}")
 
     # --- Data Application ---
 
