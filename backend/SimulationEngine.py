@@ -301,7 +301,7 @@ class SimulationEngine:
             aircraft_id=aircraft_id,
             flight_type="OUTBOUND",
             scheduledTime=now,
-            fuelRemaining=0,
+            fuelRemaining=self.params.fuel_initial_max_min,
             emergency=None,
         )
 
