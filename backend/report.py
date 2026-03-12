@@ -10,6 +10,13 @@ import json
 
 @dataclass
 class Report:
+    """
+    Data container for a snapshot of simulation statistics.
+
+    Holds calculated averages, maximums, and total counts for queues,
+    delays, and exceptions at a specific point in time or at the end
+    of a simulation run.
+    """
     # Holding / Landing Stats
     max_holding_size: int = 0
     avg_holding_size: float = 0.0
@@ -53,15 +60,39 @@ CSV_COLUMNS: List[str] = [
 
 
 def _ensure_parent_dir(csv_path: str) -> None:
+    """
+    Ensure that the parent directory for the given file path exists.
+
+    Parameters
+    ----------
+    csv_path : str
+        The full file path where the directory structure needs to be verified or created.
+    """
     Path(csv_path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
 
 def append_report_csv(report: Dict[str, Any], sim_time_min: int, csv_path: str = DEFAULT_STATS_CSV_PATH) -> str:
-    """Append one simulation report snapshot to a CSV file.
+    """
+    Append a single simulation report snapshot to a persistent CSV file.
 
-    - Always writes a row with a stable schema (CSV_COLUMNS)
-    - Unknown fields from `report` are preserved in `extra_json`
-    Returns the resolved CSV path.
+    This function ensures the report data is saved using a stable column schema.
+    Any unknown or extra fields present in the report dictionary are serialized
+    and stored in an `extra_json` column to prevent data loss without breaking
+    the CSV structure.
+
+    Parameters
+    ----------
+    report : Dict[str, Any]
+        The dictionary containing the statistical metrics to save.
+    sim_time_min : int
+        The simulation time (in minutes) at which this report was generated.
+    csv_path : str, optional
+        The file path to the destination CSV. Defaults to DEFAULT_STATS_CSV_PATH.
+
+    Returns
+    -------
+    str
+        The resolved absolute path to the written CSV file.
     """
     _ensure_parent_dir(csv_path)
     p = Path(csv_path).expanduser().resolve()
@@ -91,7 +122,23 @@ def append_report_csv(report: Dict[str, Any], sim_time_min: int, csv_path: str =
 
 
 def read_reports_csv(csv_path: str = DEFAULT_STATS_CSV_PATH) -> List[Dict[str, Any]]:
-    """Read all saved simulation reports from CSV (newest last)."""
+    """
+    Read and parse all saved simulation reports from a CSV file.
+
+    Reads the historical data, attempting to coerce known numeric fields back
+    into their correct types (ints or floats). Data stored in the `extra_json`
+    column is unpacked and merged back into the main dictionary.
+
+    Parameters
+    ----------
+    csv_path : str, optional
+        The file path to the CSV to read. Defaults to DEFAULT_STATS_CSV_PATH.
+
+    Returns
+    -------
+    List[Dict[str, Any]]
+        A list of parsed report dictionaries, ordered from oldest to newest.
+    """
     p = Path(csv_path).expanduser().resolve()
     if not p.exists():
         return []
@@ -132,5 +179,18 @@ def read_reports_csv(csv_path: str = DEFAULT_STATS_CSV_PATH) -> List[Dict[str, A
 
 
 def read_last_report(csv_path: str = DEFAULT_STATS_CSV_PATH) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve only the most recent report snapshot from the CSV log.
+
+    Parameters
+    ----------
+    csv_path : str, optional
+        The file path to the CSV to read. Defaults to DEFAULT_STATS_CSV_PATH.
+
+    Returns
+    -------
+    Optional[Dict[str, Any]]
+        The most recent report dictionary, or None if the file is empty or does not exist.
+    """
     rows = read_reports_csv(csv_path)
     return rows[-1] if rows else None
