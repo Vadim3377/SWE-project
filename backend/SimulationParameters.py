@@ -5,6 +5,42 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SimulationParams:
+    """
+    Data class representing the configurable parameters for the simulation.
+
+    This class holds all user-defined and default settings required to run
+    the airport simulation, including flow rates, runtime bounds, stochastic 
+    variations, and emergency probability weights.
+
+    Parameters
+    ----------
+    num_runways : int
+        The total number of runways available at the airport.
+    inbound_rate_per_hour : float
+        The expected average number of arriving aircraft per hour.
+    outbound_rate_per_hour : float
+        The expected average number of departing aircraft per hour.
+    arrival_stddev_min : int, optional
+        Standard deviation for arrival time jitter in minutes. Default is 5.
+    departure_stddev_min : int, optional
+        Standard deviation for departure time jitter in minutes. Default is 5.
+    max_takeoff_wait_min : int, optional
+        Maximum allowed waiting time in the takeoff queue before an aircraft is cancelled. Default is 30.
+    fuel_min_min : int, optional
+        Absolute minimum fuel threshold (in minutes) before an aircraft is diverted. Default is 10.
+    fuel_initial_min_min : int, optional
+        Lower bound for the random initial fuel assigned to a spawned aircraft. Default is 20.
+    fuel_initial_max_min : int, optional
+        Upper bound for the random initial fuel assigned to a spawned aircraft. Default is 60.
+    p_mechanical_failure : float, optional
+        Probability weight for generating a mechanical failure emergency. Default is 0.05.
+    p_passenger_illness : float, optional
+        Probability weight for generating a passenger illness emergency. Default is 0.05.
+    tick_size_min : int, optional
+        The length of a single simulation tick in minutes. Default is 1.
+    fuel_emergency_min : int, optional
+        Fuel threshold (in minutes) at which an aircraft declares a fuel emergency. Default is 15.
+    """
     num_runways: int
     inbound_rate_per_hour: float
     outbound_rate_per_hour: float
@@ -29,6 +65,15 @@ class SimulationParams:
 
 
     def validate(self) -> None:
+        """
+        Validate the current simulation parameters to ensure they are within operational bounds.
+
+        Raises
+        ------
+        ValueError
+            If any parameters fall outside their permitted ranges (e.g., negative flow rates,
+            invalid probabilities, or illogical fuel boundaries).
+        """
         if not (1 <= self.num_runways <= 10):
             raise ValueError("num_runways must be in [1, 10].")
 
