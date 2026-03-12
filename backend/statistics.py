@@ -132,11 +132,11 @@ class Statistics:
 
     # Calculates averages and bundles all metrics into a dictionary for UI or reporting
     def report(self) -> Dict[str, float]:
-        avg_holding_q = (self.holding_size_sum / self.snapshots) if self.snapshots else 0.0
-        avg_takeoff_q = (self.takeoff_size_sum / self.snapshots) if self.snapshots else 0.0
-        avg_hold_time = (self.holding_time_sum / self.holding_count) if self.holding_count else 0.0
-        avg_takeoff_wait = (self.takeoff_wait_sum / self.takeoff_count) if self.takeoff_count else 0.0
-        avg_arrival_delay = (self.arrival_delay_sum / self.arrival_count) if self.arrival_count else 0.0
+        avg_holding_q = round((self.holding_size_sum / self.snapshots) if self.snapshots else 0.0)
+        avg_takeoff_q = round((self.takeoff_size_sum / self.snapshots) if self.snapshots else 0.0)
+        avg_hold_time = round((self.holding_time_sum / self.holding_count) if self.holding_count else 0.0)
+        avg_takeoff_wait = round((self.takeoff_wait_sum / self.takeoff_count) if self.takeoff_count else 0.0)
+        avg_arrival_delay = round((self.arrival_delay_sum / self.arrival_count) if self.arrival_count else 0.0)
 
         return {
             "maxHoldingQueue": float(self.max_holding_size),
