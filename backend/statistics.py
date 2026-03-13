@@ -6,9 +6,14 @@ import random
 
 SimTime = int
 
-# Tracks simulation metrics and handles random timing jitter for aircraft spawns
 @dataclass
 class Statistics:
+    """
+    Tracks the simulation metrics and handle random timing jitter for aircraft spawns.
+
+    Records the queue sizes, delay times, diversions, and cancellations. Also serves 
+    as the main random number generator for normal-distributed aircraft spawns.
+    """
     # Configuration (set via configure_from_params)
     _arrival_stddev_min: int = 0
     _departure_stddev_min: int = 0
@@ -43,8 +48,17 @@ class Statistics:
     # Runway Usage
     runway_busy_time: Dict[Any, int] = field(default_factory=dict)
 
-    # Pulls statistical parameters and seeds the RNG from the main simulation config
     def configure_from_params(self, params: Any, seed: Optional[int] = None) -> None:
+        """
+        Extract statistical parameters and seed the RNG from the main simulation config.
+
+        Parameters
+        ----------
+        params : Any
+            The simulation parameters object containing stddev and tick size data.
+        seed : int, optional
+            A seed for the random number generator to ensure reproducible results.
+        """
         self._arrival_stddev_min = int(getattr(params, "arrival_stddev_min", 0))
         self._departure_stddev_min = int(getattr(params, "departure_stddev_min", 0))
         self._tick_size_min = int(getattr(params, "tick_size_min", 1)) or 1
@@ -52,40 +66,105 @@ class Statistics:
         if seed is not None:
             self._rng.seed(int(seed))
 
-    # Helper to snap randomised times to the nearest discrete tick duration
     def _round_to_tick(self, minutes: float) -> int:
+        """
+        Snap randomised times to the nearest discrete tick duration.
+
+        Parameters
+        ----------
+        minutes : float
+            The raw continuous time to format.
+
+        Returns
+        -------
+        int
+            The time rounded to the appropriate simulation tick resolution.
+        """
         t = int(self._tick_size_min) or 1
         return int(round(minutes / t) * t)
 
-    # Applies normal-distributed jitter to an inbound flight's scheduled time
     def sample_inbound_spawn_time(self, scheduled_time_min: int) -> int:
+        """
+        Apply normally-distributed jitter to an inbound flight's scheduled time.
+
+        Parameters
+        ----------
+        scheduled_time_min : int
+            The initial scheduled arrival time.
+
+        Returns
+        -------
+        int
+            The final calculated spawn time, constrained to be >= 0.
+        """
         sigma = float(self._arrival_stddev_min)
         jitter = self._rng.gauss(0.0, sigma) if sigma > 0 else 0.0
         spawn = int(round(int(scheduled_time_min) + jitter))
         return max(0, spawn)
 
-    # Applies normal-distributed jitter to an outbound flight's scheduled time
     def sample_outbound_spawn_time(self, scheduled_time_min: int) -> int:
+        """
+        Apply normally-distributed jitter to an outbound flight's scheduled time.
+
+        Parameters
+        ----------
+        scheduled_time_min : int
+            The initial scheduled departure time.
+
+        Returns
+        -------
+        int
+            The final calculated spawn time, constrained to be >= 0.
+        """
         sigma = float(self._departure_stddev_min)
         jitter = self._rng.gauss(0.0, sigma) if sigma > 0 else 0.0
         spawn = int(round(int(scheduled_time_min) + jitter))
         return max(0, spawn)
 
-    # Records queue sizes at the current tick for calculating maximums and averages
     def snapshot_queues(self, holding_size: int, takeoff_size: int, time: int) -> None:
+        """
+        Record current queue sizes to calculate running maximums and averages.
+
+        Parameters
+        ----------
+        holding_size : int
+            The current number of aircraft in the holding queue.
+        takeoff_size : int
+            The current number of aircraft in the take-off queue.
+        time : int
+            The current simulation time in minutes.
+        """
         self.snapshots += 1
         self.max_holding_size = max(self.max_holding_size, int(holding_size))
         self.max_takeoff_size = max(self.max_takeoff_size, int(takeoff_size))
         self.holding_size_sum += int(holding_size)
         self.takeoff_size_sum += int(takeoff_size)
 
-    # Logs the exact time an aircraft enters the holding pattern
     def record_holding_entry(self, aircraft: Any, time: SimTime) -> None:
+        """
+        Log the exact time an aircraft enters the holding pattern.
+
+        Parameters
+        ----------
+        aircraft : Any
+            The aircraft object entering the queue.
+        time : SimTime
+            The timestamp of entry.
+        """
         # Always set; no need to guard with hasattr
         setattr(aircraft, "enteredHoldingAt", int(time))
 
-    # Computes and stores delay and holding durations when an aircraft successfully lands
     def record_landing(self, aircraft: Any, time: SimTime) -> None:
+        """
+        Compute and store delay and holding durations when an aircraft lands.
+
+        Parameters
+        ----------
+        aircraft : Any
+            The aircraft object that has landed.
+        time : SimTime
+            The simulation time at touchdown.
+        """
         t = int(time)
 
         entered = getattr(aircraft, "enteredHoldingAt", None)
@@ -101,12 +180,30 @@ class Statistics:
             self.arrival_count += 1
             self.max_arrival_delay = max(self.max_arrival_delay, delay)
 
-    # Logs the exact time an aircraft enters the takeoff queue
     def record_takeoff_enqueue(self, aircraft: Any, time: SimTime) -> None:
+        """
+        Log the exact time an aircraft joins the take-off queue.
+
+        Parameters
+        ----------
+        aircraft : Any
+            The aircraft object joining the queue.
+        time : SimTime
+            The timestamp of entry.
+        """
         setattr(aircraft, "joinedTakeoffQueueAt", int(time))
 
-    # Computes and stores the wait duration when an aircraft successfully takes off
     def record_takeoff(self, aircraft: Any, time: SimTime) -> None:
+        """
+        Compute and store the wait duration when an aircraft successfully takes off.
+
+        Parameters
+        ----------
+        aircraft : Any
+            The aircraft object that is departing.
+        time : SimTime
+            The simulation time at departure.
+        """
         joined = getattr(aircraft, "joinedTakeoffQueueAt", None)
         if joined is None:
             return
@@ -115,28 +212,62 @@ class Statistics:
         self.takeoff_wait_sum += wait
         self.takeoff_count += 1
 
-
         self.max_takeoff_wait = max(self.max_takeoff_wait, wait)
 
-    # Increments the diversion counter 
     def record_diversion(self, aircraft: Any = None, time: SimTime = 0) -> None:
+        """
+        Increment the diversion counter for aircraft unable to land.
+        
+        Parameters
+        ----------
+        aircraft : Any, optional
+            The aircraft being diverted.
+        time : SimTime, optional
+            The timestamp of the diversion.
+        """
         self.diversions += 1
 
-    # Increments the cancellation counter 
     def record_cancellation(self, aircraft: Any = None, time: SimTime = 0) -> None:
+        """
+        Increment the cancellation counter for aircraft waiting too long to take off.
+
+        Parameters
+        ----------
+        aircraft : Any, optional
+            The aircraft being cancelled.
+        time : SimTime, optional
+            The timestamp of the cancellation.
+        """
         self.cancellations += 1
 
-    # Accumulates active usage time for a specific runway
     def record_runway_busy(self, runway: Any, duration_min: int) -> None:
+        """
+        Accumulate active usage time for a specific runway.
+
+        Parameters
+        ----------
+        runway : Any
+            The runway being utilised.
+        duration_min : int
+            The operational duration to add to the runway's total busy time.
+        """
         self.runway_busy_time[runway] = self.runway_busy_time.get(runway, 0) + int(duration_min)
 
-    # Calculates averages and bundles all metrics into a dictionary for UI or reporting
     def report(self) -> Dict[str, float]:
-        avg_holding_q = (self.holding_size_sum / self.snapshots) if self.snapshots else 0.0
-        avg_takeoff_q = (self.takeoff_size_sum / self.snapshots) if self.snapshots else 0.0
-        avg_hold_time = (self.holding_time_sum / self.holding_count) if self.holding_count else 0.0
-        avg_takeoff_wait = (self.takeoff_wait_sum / self.takeoff_count) if self.takeoff_count else 0.0
-        avg_arrival_delay = (self.arrival_delay_sum / self.arrival_count) if self.arrival_count else 0.0
+        """
+        Calculate final averages and package all metrics into a reporting dictionary.
+
+        Returns
+        -------
+        Dict[str, float]
+            A dictionary containing the calculated maximums, averages, and totals
+            for rendering in the UI or exporting to a log file.
+        """
+        avg_holding_q = round((self.holding_size_sum / self.snapshots) if self.snapshots else 0.0)
+        avg_takeoff_q = round((self.takeoff_size_sum / self.snapshots) if self.snapshots else 0.0)
+        avg_hold_time = round((self.holding_time_sum / self.holding_count) if self.holding_count else 0.0)
+        avg_takeoff_wait = round((self.takeoff_wait_sum / self.takeoff_count) if self.takeoff_count else 0.0)
+        avg_arrival_delay = round((self.arrival_delay_sum / self.arrival_count) if self.arrival_count else 0.0)
 
         return {
             "maxHoldingQueue": float(self.max_holding_size),
