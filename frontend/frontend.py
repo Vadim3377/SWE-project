@@ -459,13 +459,15 @@ class AirportUI:
         if hasattr(self, 'stats_win') and self.stats_win.winfo_exists():
             self.stats_win.lift()
             return
-
-        self.toggle_pause(force_pause=True) # Pauses the simulation whilst statistics is open.
+        # Pauses the simulation whilst statistics is open.
+        self.toggle_pause(force_pause=True)
         self.stats_win = tk.Toplevel(self.root)
         self.stats_win.title("Statistical Report" if not stop_flow else "Simulation Stopped - Statistics")
         self.stats_win.configure(bg=self.dark_grey)
         self.stats_win.grab_set()
 
+        # Command Buttons:
+        # If simulation is stopped, provide 'Close' and 'Reset' buttons.
         if stop_flow:
             self.stats_win.protocol("WM_DELETE_WINDOW", self.stats_win.destroy)
         else:
@@ -477,6 +479,7 @@ class AirportUI:
         header = "Live Statistical Report" if not stop_flow else "Simulation Stopped - Statistics"
         tk.Label(container, text=header, font=("Arial", int(16 * self.scale), "bold"), bg=self.lightest_grey).grid(row=0, column=0, columnspan=2, pady=(0, 10))
 
+        # Notebook Widget: Creates tabs to separate 'Current' stats from 'Previous Runs'
         notebook = ttk.Notebook(container)
         notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
         container.grid_rowconfigure(1, weight=1)
