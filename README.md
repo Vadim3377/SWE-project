@@ -8,7 +8,7 @@ The system simulates airport traffic operations and allows users to observe how 
 
 ---
 
-# 1. Client Guide
+# 1. User Guide
 
 This section explains how to **install and use the simulation program**.
 
@@ -250,39 +250,6 @@ This allows comparison between different simulation runs.
 
 ---
 
-# User Interface Guide
-
-Once ran, the program will first open to the simulation settings. These are parameters requested by the client and will configure the simulation. Each input is explained above, and these are all validated.
-
-Upon pressing apply changes, the program immidately will start running. The two columns on the left of the screen represent the take-off and holding queues. The number of planes in each queue is also shown at the top.
-
-Each widget in the queue represents a plane. Some basic information is shown, as well as a progress bar representing the time spent in the runway.
-
-Clicking on a widget allows for more information to about a plane to be shown, as well as a diagram representing the plane in its current state. This can be between on a runway, in the air (in the holding queue) or on land (in take off queue). 
-
-Information such as alitude and fuel levels are accurate. All planes in the holding queue are seperated by 1000, and fuel decreses every minute. Other data about planes such as origin, ground speed and callsign are randomised, but realistic.
-
-If there is an emergency on a plane, it will also be shown in the widget.
-
-All columns will become scrollable if the number of widgets becomes too large to fit on the screen.
-
-On the other side of the display is the runways column. This shows information about all the runways in the simulation, and allows the user to configure them. 
-
-The first button allows the user to close the runway (e.g. for maintainace, snow clearance etc.) The program clears any planes on the runway first. The second button allows the user to cycle between different operating modes: landing, take-off and mixed.
-
-Clicking on a runway widget also allows a diagram of the runway to appear, depending on if it has a plane on it or not. The runway rotation depends on the randomised bearing for it. Additional information is also shown about the runway.
-
-The bottom section shows the simulated time, and allows for further functionality. All the buttons can be clicked or accessed using a key press. 
-
-Pause/Continue allows the user to pause and play the simulation. System settings brings up the same settings as before, and allows for live simulation updates.
-
-View Statistics brings up a window which shows information collected during the simulation runtime. Previous runs are also stored and collected allowing for easy comparison between them.
-
-Reset simulation clears the current simulation, allowing you to re-run the simulation with the same data.
-
-Stop simulation saves the simulation run, and allows you to compare runs.
-
----
 
 # 2. Developer Guide
 ## Programming Language and Technologies
@@ -614,8 +581,40 @@ This file contains:
 
 # User Interface
 
-PLACEHOLDER
+Once ran, the program will first open to the simulation settings. These are parameters requested by the client and will configure the simulation. Each input is explained above, and these are all validated.
 
-This section will describe the graphical user interface and controls implemented in the frontend module.
+Upon pressing apply changes, the program immidately will start running. The two columns on the left of the screen represent the take-off and holding queues. The number of planes in each queue is also shown at the top.
 
----
+Each widget in the queue represents a plane. Some basic information is shown, as well as a progress bar representing the time spent in the runway.
+
+Clicking on a widget allows for more information to about a plane to be shown, as well as a diagram representing the plane in its current state. This can be between on a runway, in the air (in the holding queue) or on land (in take off queue). 
+
+Information such as alitude and fuel levels are accurate. All planes in the holding queue are seperated by 1000, and fuel decreses every minute. Other data about planes such as origin, ground speed and callsign are randomised, but realistic.
+
+If there is an emergency on a plane, it will also be shown in the widget.
+
+All columns will become scrollable if the number of widgets becomes too large to fit on the screen.
+
+On the other side of the display is the runways column. This shows information about all the runways in the simulation, and allows the user to configure them. 
+
+The first button allows the user to close the runway (e.g. for maintainace, snow clearance etc.) The program clears any planes on the runway first. The second button allows the user to cycle between different operating modes: landing, take-off and mixed.
+
+Clicking on a runway widget also allows a diagram of the runway to appear, depending on if it has a plane on it or not. The runway rotation depends on the randomised bearing for it. Additional information is also shown about the runway.
+
+The bottom section shows the simulated time, and allows for further functionality. All the buttons can be clicked or accessed using a key press. 
+
+Pause/Continue allows the user to pause and play the simulation. System settings brings up the same settings as before, and allows for live simulation updates.
+
+View Statistics brings up a window which shows information collected during the simulation runtime. Previous runs are also stored and collected allowing for easy comparison between them.
+
+Reset simulation clears the current simulation, allowing you to re-run the simulation with the same data.
+
+Stop simulation saves the simulation run, and allows you to compare runs.
+The user interface (UI) for the Airport Traffic Simulation System is a graphical dashboard built using **Python’s Tkinter library**. It serves as the primary way for users to interact with the simulation engine, providing real-time visual feedback, manual controls, and statistical reporting.
+
+
+### Technical Implementation Details
+
+* **Image Caching:** To prevent lag, the UI preloads assets (planes, runways, icons) into memory using the `PIL` (Pillow) library.
+* **Smooth Updates:** A `smooth_update` loop runs at 60Hz (every 16ms) to ensure progress bars move fluidly, even if the simulation "tick" happens only once per second.
+* **Thread-Like Behavior:** Uses `root.after()` loops to manage the simulation timing without freezing the interface.

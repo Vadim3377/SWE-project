@@ -36,8 +36,8 @@ class Report:
     total_time: int = 0
 
 
-# --- CSV persistence for simulation statistics ---
-# Stored alongside backend code by default (so both frontend + backend can agree on location).
+# CSV persistence for simulation statistics
+# Stored alongside backend code by default (so both frontend and backend can agree on location).
 DEFAULT_STATS_CSV_PATH = str((Path(__file__).resolve().parent / "simulation_statistics.csv").resolve())
 
 # Stable column order for the CSV file. Unknown keys go into `extra_json`.
