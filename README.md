@@ -15,25 +15,35 @@ This section explains how to **install and use the simulation program**.
 ---
 
 # Installation
-
-The project is distributed as a standalone executable.
-
-### Steps
-
-1. Download the project folder.
-2. Navigate to the folder:
+1. Navigate to the `dist` directory:
 
 ```
 dist/
 ```
 
+2. Make the executable runnable (if required):
+
+```
+chmod +x AirportSimulation
+```
+
 3. Run the program:
 
 ```
-AirportSimulation.exe
+./AirportSimulation
 ```
 
-No installation or Python environment is required.
+No Python installation is required when using the executable.
+
+---
+
+# System Requirements
+
+To run the executable version the system must support:
+
+* Linux operating system
+* x86-64 architecture
+* graphical environment (X11 / desktop environment)
 
 ---
 
@@ -252,6 +262,13 @@ This allows comparison between different simulation runs.
 
 
 # 2. Developer Guide
+## Source Code Repository
+
+The full source code for the Airport Traffic Simulation System is available on GitHub:
+
+[https://github.com/Vadim3377/SWE-project](https://github.com/Vadim3377/SWE-project)
+
+---
 ## Programming Language and Technologies
 
 The backend of the Airport Traffic Simulation System is implemented in **Python 3**.
